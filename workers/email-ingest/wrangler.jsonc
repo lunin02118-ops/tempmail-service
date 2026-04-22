@@ -9,7 +9,7 @@
     "head_sampling_rate": 1
   },
   "vars": {
-    "APP_INGEST_URL": "https://your-render-app.onrender.com/ingest/messages",
+    "APP_INGEST_URL": "https://tempmail-web.onrender.com/ingest/messages",
     "PUBLIC_MAIL_DOMAIN": "samgpt.me",
     "MAX_RAW_BYTES": "1048576"
   }
