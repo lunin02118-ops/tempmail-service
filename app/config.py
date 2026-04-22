@@ -67,6 +67,31 @@ def _split_csv_env(env_name: str) -> tuple[str, ...]:
     return tuple(values)
 
 
+def _normalize_domain_values(values: tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        clean = value.strip().lower()
+        if not clean or clean in seen:
+            continue
+        seen.add(clean)
+        normalized.append(clean)
+    return tuple(normalized)
+
+
+def _resolve_public_mail_domains() -> tuple[str, ...]:
+    csv_values = _normalize_domain_values(list(_split_csv_env("PUBLIC_MAIL_DOMAINS")))
+    if csv_values:
+        return csv_values
+
+    return _normalize_domain_values(
+        [
+            os.getenv("PUBLIC_MAIL_DOMAIN", ""),
+            os.getenv("DEFAULT_FROM_ALIAS_DOMAIN", ""),
+        ]
+    )
+
+
 def _resolve_groq_api_keys() -> tuple[str, ...]:
     csv_values = _split_csv_env("GROQ_API_KEYS")
     if csv_values:
@@ -93,6 +118,7 @@ class AppSettings:
     database_url: str
     database_url_direct: str | None
     public_mail_domain: str
+    public_mail_domains: tuple[str, ...]
     app_base_url: str | None
     app_host: str
     app_port: int
@@ -126,6 +152,13 @@ class AppSettings:
         return self.public_mail_domain or self.default_from_alias_domain
 
     @property
+    def available_mail_domains(self) -> tuple[str, ...]:
+        if self.public_mail_domains:
+            return self.public_mail_domains
+        active_domain = self.active_mail_domain
+        return (active_domain,) if active_domain else ()
+
+    @property
     def has_gmail_ingest(self) -> bool:
         return self.gmail_client_secret_path is not None and self.gmail_token_path is not None
 
@@ -139,7 +172,8 @@ class AppSettings:
         if database_url_direct_raw:
             database_url_direct = _resolve_database_url(database_url_direct_raw)
 
-        public_mail_domain = os.getenv("PUBLIC_MAIL_DOMAIN", os.getenv("DEFAULT_FROM_ALIAS_DOMAIN", ""))
+        public_mail_domains = _resolve_public_mail_domains()
+        public_mail_domain = public_mail_domains[0] if public_mail_domains else ""
         session_secret = os.getenv("SESSION_SECRET")
         if not session_secret:
             session_secret = "test-session-secret" if os.getenv("APP_ENV") == "test" else "dev-session-secret"
@@ -149,7 +183,8 @@ class AppSettings:
             app_env=os.getenv("APP_ENV", "prod"),
             database_url=database_url,
             database_url_direct=database_url_direct,
-            public_mail_domain=public_mail_domain.strip().lower(),
+            public_mail_domain=public_mail_domain,
+            public_mail_domains=public_mail_domains,
             app_base_url=os.getenv("APP_BASE_URL"),
             app_host=os.getenv("APP_HOST", "127.0.0.1"),
             app_port=int(os.getenv("APP_PORT", "8787")),

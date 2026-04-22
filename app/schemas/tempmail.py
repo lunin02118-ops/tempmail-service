@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 class MailboxCreateRequest(BaseModel):
     description: str | None = None
     requested_local_part: str | None = Field(default=None, min_length=3, max_length=32)
+    requested_domain: str | None = Field(default=None, min_length=1, max_length=255)
     local_part_length: int = Field(default=10, ge=4, le=32)
     expires_in_minutes: int | None = Field(default=None, ge=5, le=24 * 60)
     turnstile_token: str | None = None

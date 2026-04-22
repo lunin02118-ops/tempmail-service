@@ -40,6 +40,19 @@ class MailboxService:
         self._settings = settings
         self._repo = repo
 
+    def _resolve_mailbox_domain(self, requested_domain: str | None) -> str:
+        available_domains = self._settings.available_mail_domains
+        if not available_domains:
+            raise RuntimeError("PUBLIC_MAIL_DOMAIN or PUBLIC_MAIL_DOMAINS is not configured")
+
+        if requested_domain:
+            normalized = requested_domain.strip().lower()
+            if normalized not in available_domains:
+                raise ValueError("requested_domain is not available")
+            return normalized
+
+        return available_domains[0]
+
     def create_mailbox(
         self,
         *,
@@ -47,11 +60,10 @@ class MailboxService:
         description: str | None = None,
         expires_in_minutes: int | None = None,
         requested_local_part: str | None = None,
+        requested_domain: str | None = None,
         local_part_length: int = 10,
     ) -> dict[str, object]:
-        domain = self._settings.active_mail_domain
-        if not domain:
-            raise RuntimeError("PUBLIC_MAIL_DOMAIN is not configured")
+        domain = self._resolve_mailbox_domain(requested_domain)
 
         if requested_local_part:
             local_part = validate_requested_local_part(requested_local_part)

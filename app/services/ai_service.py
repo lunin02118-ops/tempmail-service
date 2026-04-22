@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import html
 import json
+import quopri
 import re
 from email.utils import parseaddr
 from itertools import count
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -12,25 +15,103 @@ from app.config import AppSettings
 
 
 _URL_RE = re.compile(r"https?://[^\s<>\"]+")
+_HTML_HREF_RE = re.compile(r"""href\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 _OTP_CONTEXT_RE = re.compile(
-    r"(?:otp|code|passcode|verification|security code|confirm(?:ation)? code)[^0-9]{0,20}([0-9]{4,10})",
+    (
+        r"(?:otp|passcode|verification|security code|confirm(?:ation)? code|"
+        r"verification code|one-time password|временн\w+\s+код|код(?:\s+подтверждения)?|"
+        r"проверочн\w+\s+код|код\s+безопасности)"
+        r"[^0-9]{0,40}([0-9][0-9\s-]{3,14}[0-9])"
+    ),
     re.IGNORECASE,
 )
-_OTP_FALLBACK_RE = re.compile(r"\b([0-9]{4,8})\b")
+_OTP_FALLBACK_RE = re.compile(r"\b((?:[0-9][\s-]?){4,10})\b")
+_QUOTED_PRINTABLE_RE = re.compile(r"=(?:\r?\n|[0-9A-F]{2})")
+_HTML_BREAK_RE = re.compile(r"(?i)<br\s*/?>")
+_HTML_BLOCK_CLOSE_RE = re.compile(r"(?i)</(?:p|div|tr|table|li|h[1-6]|section|article)>")
+_HTML_TAG_RE = re.compile(r"(?s)<[^>]+>")
+
+_ASSET_PATH_MARKERS = (
+    "/fonts/",
+    "/logo-assets/",
+    "/images/",
+    "/image/",
+    "/static/",
+    "/assets/",
+    "/wf/open",
+)
+_ASSET_EXTENSIONS = (
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".webp",
+    ".ico",
+    ".css",
+    ".js",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".otf",
+)
 
 
 def _compact_text(*parts: str | None) -> str:
     return "\n\n".join(part.strip() for part in parts if part and part.strip())
 
 
-def _extract_action_links(text: str) -> list[str]:
-    matches = _URL_RE.findall(text)
+def _decode_quoted_printable_text(value: str | None) -> str:
+    if not value:
+        return ""
+    text = value.strip()
+    if not text:
+        return ""
+    if not _QUOTED_PRINTABLE_RE.search(text):
+        return text
+    decoded_bytes = quopri.decodestring(text.encode("utf-8", errors="ignore"))
+    try:
+        return decoded_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        return decoded_bytes.decode("latin-1", errors="ignore")
+
+
+def _strip_html_to_text(value: str | None) -> str:
+    if not value:
+        return ""
+    text = _HTML_TAG_RE.sub(" ", _HTML_BLOCK_CLOSE_RE.sub("\n", _HTML_BREAK_RE.sub("\n", value)))
+    text = html.unescape(text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _normalize_candidate_url(value: str) -> str | None:
+    candidate = html.unescape(value.strip()).rstrip(").,;:!?\"'")
+    parsed = urlparse(candidate)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+
+    lowered = candidate.lower()
+    if parsed.netloc.lower() == "cdn.openai.com":
+        return None
+    if any(marker in lowered for marker in _ASSET_PATH_MARKERS):
+        return None
+    if parsed.path.lower().endswith(_ASSET_EXTENSIONS):
+        return None
+    return candidate
+
+
+def _extract_action_links(text: str, html_text: str | None = None) -> list[str]:
+    matches = list(_URL_RE.findall(text))
+    if html_text:
+        matches.extend(_HTML_HREF_RE.findall(html_text))
     seen: set[str] = set()
     result: list[str] = []
     for match in matches:
-        if match not in seen:
-            seen.add(match)
-            result.append(match)
+        normalized = _normalize_candidate_url(match)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
     return result[:5]
 
 
@@ -88,16 +169,54 @@ def _build_summary(subject: str | None, body_text: str | None, otp_code: str | N
     return "Email received"
 
 
-def _extract_otp_code(text: str) -> tuple[str | None, str]:
-    contextual_match = _OTP_CONTEXT_RE.search(text)
-    if contextual_match:
-        return contextual_match.group(1), "high"
+def _normalize_otp_match(raw_match: str) -> str | None:
+    digits_only = re.sub(r"\D", "", raw_match or "")
+    if 4 <= len(digits_only) <= 10:
+        return digits_only
+    return None
 
-    fallback_match = _OTP_FALLBACK_RE.search(text)
-    if fallback_match:
-        return fallback_match.group(1), "medium"
+
+def _otp_preference_key(code: str, source: str, index: int) -> tuple[int, int, int]:
+    preferred_length_penalty = 0 if 6 <= len(code) <= 8 else 1
+    source_penalty = 0 if source == "context" else 1
+    return (source_penalty, preferred_length_penalty, index)
+
+
+def _extract_otp_code(text: str) -> tuple[str | None, str]:
+    candidates: list[tuple[str, str, int]] = []
+
+    for match in _OTP_CONTEXT_RE.finditer(text):
+        normalized = _normalize_otp_match(match.group(1))
+        if normalized:
+            candidates.append((normalized, "context", match.start()))
+
+    for match in _OTP_FALLBACK_RE.finditer(text):
+        normalized = _normalize_otp_match(match.group(1))
+        if normalized:
+            candidates.append((normalized, "fallback", match.start()))
+
+    if candidates:
+        best_code, best_source, _ = min(candidates, key=lambda item: _otp_preference_key(*item))
+        return best_code, "high" if best_source == "context" else "medium"
 
     return None, "low"
+
+
+def _prepare_analysis_content(message: dict[str, object]) -> dict[str, str | None]:
+    subject = str(message.get("subject") or "").strip()
+    body_text = _decode_quoted_printable_text(str(message.get("body_text") or ""))
+    body_html = _decode_quoted_printable_text(str(message.get("body_html") or ""))
+    visible_html_text = _strip_html_to_text(body_html)
+    analysis_body = body_text or visible_html_text
+    combined_text = _compact_text(subject, analysis_body)
+    return {
+        "subject": subject,
+        "body_text": body_text,
+        "body_html": body_html,
+        "visible_html_text": visible_html_text,
+        "analysis_body": analysis_body,
+        "combined_text": combined_text,
+    }
 
 
 def _coerce_json_object(raw_text: str) -> dict[str, Any] | None:
@@ -189,14 +308,15 @@ class MessageAnalysisService:
         self._groq_rotator = GroqKeyRotator(settings.groq_api_keys)
 
     def analyze_deterministically(self, message: dict[str, object]) -> dict[str, object | None]:
-        subject = str(message.get("subject") or "").strip()
-        body_text = str(message.get("body_text") or "").strip()
-        body_html = str(message.get("body_html") or "").strip()
+        prepared = _prepare_analysis_content(message)
+        subject = str(prepared["subject"] or "").strip()
+        body_text = str(prepared["analysis_body"] or "").strip()
+        body_html = str(prepared["body_html"] or "").strip()
         from_address = str(message.get("from_address") or "").strip() or None
-        combined_text = _compact_text(subject, body_text, body_html)
+        combined_text = str(prepared["combined_text"] or "")
         otp_code, confidence = _extract_otp_code(combined_text)
         message_type = _detect_message_type(combined_text)
-        action_links = _extract_action_links(combined_text)
+        action_links = _extract_action_links(body_text, body_html)
         sender_brand = _extract_sender_brand(from_address)
         action_required = _detect_action_required(combined_text, message_type)
         summary = _build_summary(subject, body_text, otp_code)
@@ -222,6 +342,7 @@ class MessageAnalysisService:
         allow_remote: bool = True,
     ) -> dict[str, object | None]:
         deterministic = self.analyze_deterministically(message)
+        prepared = _prepare_analysis_content(message)
         if not allow_remote or not self._settings.groq_api_keys:
             return deterministic
 
@@ -229,8 +350,8 @@ class MessageAnalysisService:
             {
                 "mailbox_address": message.get("mailbox_address"),
                 "from_address": message.get("from_address"),
-                "subject": message.get("subject"),
-                "body_text": message.get("body_text"),
+                "subject": prepared.get("subject"),
+                "body_text": prepared.get("analysis_body"),
                 "deterministic": {
                     "summary": deterministic.get("summary"),
                     "message_type": deterministic.get("message_type"),

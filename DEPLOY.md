@@ -24,6 +24,7 @@ uvicorn app.main:create_app --factory --host 0.0.0.0 --port $PORT
 ```env
 APP_ENV=prod
 LOG_LEVEL=INFO
+PUBLIC_MAIL_DOMAINS=mail.example.com,alt.example.com
 PUBLIC_MAIL_DOMAIN=mail.example.com
 DATABASE_URL=postgresql+psycopg://...
 DATABASE_URL_DIRECT=postgresql+psycopg://...
@@ -56,6 +57,8 @@ The app now serves the browser UI and the main tempmail API needed for the MVP:
 `/client-config` intentionally exposes only public browser configuration, including the
 Turnstile site key. The Turnstile secret key and ingest webhook secret must stay in
 Render environment variables only.
+Set `PUBLIC_MAIL_DOMAINS` to a comma-separated list if the UI should let users choose
+between several inbound mailbox domains. The first domain becomes the default selection.
 
 ### Cloudflare Ingest Note
 
@@ -85,6 +88,7 @@ npx wrangler deploy
 Do not bind the Email Routing catch-all until `APP_INGEST_URL` points to the real Render URL.
 If the UI is served from a Render hostname, add that hostname to the Turnstile widget domains
 alongside the production mail domain.
+If the Worker should accept several inbound domains, set `PUBLIC_MAIL_DOMAINS` there too.
 
 ## Legacy Standalone Path
 

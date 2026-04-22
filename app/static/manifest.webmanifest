@@ -1,0 +1,9 @@
+{
+  "name": "SamGPT Temp Mail",
+  "short_name": "Temp Mail",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6ead4",
+  "theme_color": "#192331",
+  "description": "Temporary inboxes with OTP extraction and automatic AI analysis."
+}

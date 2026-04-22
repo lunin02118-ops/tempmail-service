@@ -11,6 +11,8 @@ services:
         value: prod
       - key: LOG_LEVEL
         value: INFO
+      - key: PUBLIC_MAIL_DOMAINS
+        sync: false
       - key: PUBLIC_MAIL_DOMAIN
         sync: false
       - key: DATABASE_URL

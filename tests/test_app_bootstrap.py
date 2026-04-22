@@ -39,4 +39,4 @@ def test_health_endpoint_returns_ok(tmp_path, monkeypatch):
     route = next(route for route in app.router.routes if getattr(route, "path", None) == "/health")
     response = route.endpoint()
 
-    assert response == {"status": "ok", "service": "mail-telegram-app"}
+    assert response == {"status": "ok", "service": "samgpt-tempmail"}

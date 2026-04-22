@@ -2,6 +2,7 @@ export interface Env {
   APP_INGEST_URL: string;
   INGEST_WEBHOOK_SECRET: string;
   PUBLIC_MAIL_DOMAIN?: string;
+  PUBLIC_MAIL_DOMAINS?: string;
   MAX_RAW_BYTES?: string;
   WORKER_ENVIRONMENT?: string;
 }
@@ -38,6 +39,19 @@ function normalizeAddress(value: string | null | undefined): string | null {
   }
   const match = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
   return match ? match[0].toLowerCase() : null;
+}
+
+function parseAllowedDomains(env: Env): string[] {
+  const csvValues = (env.PUBLIC_MAIL_DOMAINS ?? "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  if (csvValues.length) {
+    return [...new Set(csvValues)];
+  }
+
+  const singleDomain = env.PUBLIC_MAIL_DOMAIN?.trim().toLowerCase();
+  return singleDomain ? [singleDomain] : [];
 }
 
 function getHeader(headers: Headers, name: string): string | null {
@@ -180,9 +194,10 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env): Promise<
     return;
   }
 
-  if (env.PUBLIC_MAIL_DOMAIN) {
+  const allowedDomains = parseAllowedDomains(env);
+  if (allowedDomains.length) {
     const domain = toAddress.split("@", 2)[1];
-    if (domain !== env.PUBLIC_MAIL_DOMAIN.toLowerCase()) {
+    if (!allowedDomains.includes(domain)) {
       message.setReject("Recipient domain is not served here");
       return;
     }

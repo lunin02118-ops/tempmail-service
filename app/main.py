@@ -4,6 +4,7 @@ import argparse
 import threading
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -21,7 +22,7 @@ def create_app(telegram_client=None) -> FastAPI:
     initialize_database(settings)
     set_telegram_client_dependency(telegram_client)
 
-    app = FastAPI(title="mail-telegram-app")
+    app = FastAPI(title="samgpt-tempmail")
     static_dir = settings.project_root / "app" / "static"
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     app.include_router(aliases_router)
@@ -33,10 +34,19 @@ def create_app(telegram_client=None) -> FastAPI:
         index_path = static_dir / "index.html"
         return HTMLResponse(index_path.read_text(encoding="utf-8"))
 
+    @app.get("/manifest.webmanifest", include_in_schema=False)
+    def web_manifest() -> FileResponse:
+        return FileResponse(static_dir / "manifest.webmanifest", media_type="application/manifest+json")
+
+    @app.get("/service-worker.js", include_in_schema=False)
+    def service_worker() -> FileResponse:
+        return FileResponse(static_dir / "service-worker.js", media_type="application/javascript")
+
     @app.get("/client-config")
     def client_config() -> dict[str, object]:
         return {
             "mail_domain": settings.active_mail_domain,
+            "mail_domains": list(settings.available_mail_domains),
             "mailbox_default_ttl_minutes": settings.mailbox_default_ttl_minutes,
             "turnstile_site_key": settings.turnstile_site_key,
             "turnstile_enabled": bool(settings.turnstile_secret_key),
@@ -44,7 +54,7 @@ def create_app(telegram_client=None) -> FastAPI:
 
     @app.get("/health")
     def health() -> dict[str, str]:
-        return {"status": "ok", "service": "mail-telegram-app"}
+        return {"status": "ok", "service": "samgpt-tempmail"}
 
     return app
 

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import httpx
-from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Header, HTTPException, Response, status
 
 from app.config import AppSettings
 from app.repositories.ai_extractions import AIExtractionRepository
@@ -27,6 +28,7 @@ from app.services.session_service import SESSION_COOKIE_NAME, generate_session_t
 
 
 router = APIRouter(tags=["tempmail"])
+logger = logging.getLogger(__name__)
 
 
 def get_settings() -> AppSettings:
@@ -188,6 +190,40 @@ async def _verify_turnstile(turnstile_token: str | None, settings: AppSettings) 
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="turnstile verification failed")
 
 
+def _is_completed_groq_analysis(extraction: dict[str, object] | None) -> bool:
+    if extraction is None:
+        return False
+    return str(extraction.get("provider") or "") == "groq" and str(extraction.get("status") or "") == "completed"
+
+
+async def _run_auto_analysis_for_message(
+    *,
+    message_id: int,
+    session_token_hash: str,
+    settings: AppSettings,
+) -> None:
+    if not settings.groq_api_keys:
+        return
+
+    message_repo = MessageRepository(settings)
+    ai_repo = AIExtractionRepository(settings)
+    analysis_service = MessageAnalysisService(settings)
+
+    existing_extraction = ai_repo.get_by_message_id(message_id)
+    if _is_completed_groq_analysis(existing_extraction):
+        return
+
+    message = message_repo.get_for_session(message_id, session_token_hash, mark_as_read=False)
+    if message is None:
+        return
+
+    try:
+        analysis_payload = await analysis_service.analyze_message(message, allow_remote=True)
+        ai_repo.upsert(message_id, analysis_payload)
+    except Exception:
+        logger.exception("auto-analysis failed for message_id=%s", message_id)
+
+
 @router.post("/mailboxes", response_model=MailboxCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_mailbox(
     request: MailboxCreateRequest,
@@ -207,12 +243,13 @@ async def create_mailbox(
             description=request.description,
             expires_in_minutes=request.expires_in_minutes,
             requested_local_part=request.requested_local_part,
+            requested_domain=request.requested_domain,
             local_part_length=request.local_part_length,
         )
     except FileExistsError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
@@ -332,7 +369,9 @@ def get_latest_notification(
 @router.post("/ingest/messages", response_model=IngestMessageResponse)
 async def ingest_message(
     request: IngestMessageRequest,
+    background_tasks: BackgroundTasks,
     _: None = Depends(require_ingest_secret),
+    settings: AppSettings = Depends(get_settings),
     mailbox_repo: MailboxRepository = Depends(get_mailbox_repository),
     message_repo: MessageRepository = Depends(get_message_repository),
     ai_repo: AIExtractionRepository = Depends(get_ai_extraction_repository),
@@ -360,9 +399,19 @@ async def ingest_message(
 
     session_token_hash = str(mailbox["session_token_hash"])
     message = message_repo.get_for_session(message_id, session_token_hash, mark_as_read=False)
+    existing_extraction = ai_repo.get_by_message_id(message_id)
     if message is not None:
-        deterministic_payload = await analysis_service.analyze_message(message, allow_remote=False)
-        ai_repo.upsert(message_id, deterministic_payload)
+        if existing_extraction is None:
+            deterministic_payload = await analysis_service.analyze_message(message, allow_remote=False)
+            existing_extraction = ai_repo.upsert(message_id, deterministic_payload)
+
+        if settings.groq_api_keys and not _is_completed_groq_analysis(existing_extraction):
+            background_tasks.add_task(
+                _run_auto_analysis_for_message,
+                message_id=message_id,
+                session_token_hash=session_token_hash,
+                settings=settings,
+            )
 
     notification = message_repo.build_notification_payload(message_id, session_token_hash)
     return IngestMessageResponse(

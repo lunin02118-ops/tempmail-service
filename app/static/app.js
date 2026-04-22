@@ -11,9 +11,9 @@ const state = {
 const el = {
   form: document.querySelector("#mailbox-form"),
   localPart: document.querySelector("#local-part"),
+  domainSelect: document.querySelector("#domain-select"),
   description: document.querySelector("#description"),
   ttl: document.querySelector("#ttl"),
-  domainLabel: document.querySelector("#domain-label"),
   turnstileSlot: document.querySelector("#turnstile-slot"),
   status: document.querySelector("#status"),
   mailboxStrip: document.querySelector("#mailbox-strip"),
@@ -59,6 +59,30 @@ function normalizeLink(value) {
     return "";
   }
   return "";
+}
+
+function getAvailableDomains() {
+  const domains = Array.isArray(state.config?.mail_domains) ? state.config.mail_domains : [];
+  if (domains.length) {
+    return domains;
+  }
+  return state.config?.mail_domain ? [state.config.mail_domain] : [];
+}
+
+function renderDomainOptions() {
+  const domains = getAvailableDomains();
+  el.domainSelect.innerHTML = domains
+    .map((domain) => `<option value="${escapeHtml(domain)}">@${escapeHtml(domain)}</option>`)
+    .join("");
+
+  if (!domains.length) {
+    el.domainSelect.innerHTML = '<option value="">@domain</option>';
+    el.domainSelect.disabled = true;
+    return;
+  }
+
+  el.domainSelect.disabled = domains.length <= 1;
+  el.domainSelect.value = domains.includes(state.config?.mail_domain) ? state.config.mail_domain : domains[0];
 }
 
 async function api(path, options = {}) {
@@ -261,6 +285,14 @@ async function selectMessage(messageId) {
   await loadInbox();
 }
 
+async function refreshSelectedMessageDetail() {
+  if (!state.selectedMessageId) {
+    return;
+  }
+  const message = await api(`/messages/${state.selectedMessageId}`);
+  renderDetail(message);
+}
+
 async function analyzeSelectedMessage() {
   if (!state.selectedMessageId) {
     return;
@@ -287,6 +319,7 @@ async function createMailbox(event) {
   }
 
   const localPart = el.localPart.value.trim();
+  const requestedDomain = el.domainSelect.value.trim();
   const description = el.description.value.trim();
   const expiresInMinutes = Number(el.ttl.value);
   const body = {
@@ -299,6 +332,9 @@ async function createMailbox(event) {
   }
   if (description) {
     body.description = description;
+  }
+  if (requestedDomain) {
+    body.requested_domain = requestedDomain;
   }
   if (state.turnstileToken) {
     body.turnstile_token = state.turnstileToken;
@@ -331,7 +367,7 @@ async function copyAddress(address) {
 
 async function boot() {
   state.config = await api("/client-config");
-  el.domainLabel.textContent = `@${state.config.mail_domain || "domain"}`;
+  renderDomainOptions();
   if (state.config.mailbox_default_ttl_minutes) {
     el.ttl.value = String(state.config.mailbox_default_ttl_minutes);
   }
@@ -383,7 +419,9 @@ el.mailboxStrip.addEventListener("click", (event) => {
 
 setInterval(() => {
   if (state.sessionToken) {
-    loadInbox().catch(() => undefined);
+    loadInbox({ updateStatus: false })
+      .then(() => refreshSelectedMessageDetail())
+      .catch(() => undefined);
   }
 }, 12_000);
 

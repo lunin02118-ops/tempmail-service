@@ -231,16 +231,26 @@ select:focus {
   background: transparent;
 }
 
+.address-row select {
+  width: auto;
+  min-width: 168px;
+  border: 0;
+  border-left: 1px solid rgba(25, 35, 49, 0.12);
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--signal-dark);
+  font-weight: 800;
+  text-transform: none;
+}
+
 .address-row input:focus {
   box-shadow: none;
   transform: none;
 }
 
-#domain-label {
-  padding: 0 14px;
-  color: var(--signal-dark);
-  font-weight: 800;
-  text-transform: none;
+#domain-select:focus {
+  box-shadow: none;
+  transform: none;
 }
 
 .turnstile-slot {
@@ -536,5 +546,16 @@ select:focus {
 
   .detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .address-row {
+    grid-template-columns: 1fr;
+  }
+
+  .address-row select {
+    width: 100%;
+    border-left: 0;
+    border-top: 1px solid rgba(25, 35, 49, 0.12);
+    border-radius: 0 0 16px 16px;
   }
 }
