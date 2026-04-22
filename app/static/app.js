@@ -153,14 +153,18 @@ function renderMailboxes() {
     .join("");
 }
 
-function renderMessages() {
+function renderMessages({ updateStatus = true } = {}) {
   if (!state.messages.length) {
     el.messageList.innerHTML = "";
-    setStatus(state.sessionToken ? "No mail yet. Send a code to the address above." : "Create a mailbox to begin.");
+    if (updateStatus) {
+      setStatus(state.sessionToken ? "No mail yet. Send a code to the address above." : "Create a mailbox to begin.");
+    }
     return;
   }
 
-  setStatus(`${state.messages.length} message${state.messages.length === 1 ? "" : "s"} in this session.`);
+  if (updateStatus) {
+    setStatus(`${state.messages.length} message${state.messages.length === 1 ? "" : "s"} in this session.`);
+  }
   el.messageList.innerHTML = state.messages
     .map((message) => {
       const selected = message.id === state.selectedMessageId ? " is-selected" : "";
@@ -239,13 +243,13 @@ async function loadMailboxes() {
   renderMailboxes();
 }
 
-async function loadInbox() {
+async function loadInbox(options = {}) {
   if (!state.sessionToken) {
-    renderMessages();
+    renderMessages(options);
     return;
   }
   state.messages = await api("/inbox");
-  renderMessages();
+  renderMessages(options);
 }
 
 async function selectMessage(messageId) {
@@ -268,7 +272,7 @@ async function analyzeSelectedMessage() {
     setStatus(`Analyzer finished: ${payload.analysis.provider || "deterministic"}.`, "success");
     const detail = await api(`/messages/${state.selectedMessageId}`);
     renderDetail(detail);
-    await loadInbox();
+    await loadInbox({ updateStatus: false });
   } finally {
     el.analyze.disabled = false;
   }
