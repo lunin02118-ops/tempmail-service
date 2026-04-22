@@ -9,6 +9,16 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 APP_NAME = "SamGPTDesktopWidget"
 DEFAULT_WIDGET_URL = "https://tempmail-web.onrender.com/widget"
+PERSISTED_SETTING_KEYS = (
+    "url",
+    "width",
+    "height",
+    "x",
+    "y",
+    "always_on_top",
+    "pin_desktop",
+    "hide_from_taskbar",
+)
 
 
 @dataclass(slots=True)
@@ -61,13 +71,17 @@ def load_saved_settings(path: Path | None = None) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         return {}
 
-    return payload if isinstance(payload, dict) else {}
+    if not isinstance(payload, dict):
+        return {}
+
+    return {key: payload[key] for key in PERSISTED_SETTING_KEYS if key in payload}
 
 
 def save_settings(settings: WidgetSettings, path: Path | None = None) -> Path:
     target = path or settings_file()
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(asdict(settings), ensure_ascii=False, indent=2), encoding="utf-8")
+    persisted_payload = {key: asdict(settings)[key] for key in PERSISTED_SETTING_KEYS}
+    target.write_text(json.dumps(persisted_payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return target
 
 

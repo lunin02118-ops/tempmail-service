@@ -1,3 +1,5 @@
+import json
+
 from windows_widget.settings import WidgetSettings, load_saved_settings, normalize_widget_url, resolve_settings, save_settings
 
 
@@ -56,3 +58,30 @@ def test_save_and_load_settings_roundtrip(tmp_path):
     assert loaded["height"] == 666
     assert loaded["x"] == 12
     assert loaded["y"] == 34
+
+
+def test_load_saved_settings_ignores_runtime_only_flags(tmp_path):
+    target = tmp_path / "settings.json"
+    target.write_text(
+        json.dumps(
+            {
+                "url": "https://example.com/widget?native=1",
+                "width": 400,
+                "height": 700,
+                "x": 15,
+                "y": 25,
+                "always_on_top": True,
+                "hide_from_taskbar": False,
+                "debug": True,
+                "close_after": 3.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = load_saved_settings(target)
+
+    assert loaded["url"] == "https://example.com/widget?native=1"
+    assert loaded["always_on_top"] is True
+    assert "debug" not in loaded
+    assert "close_after" not in loaded
