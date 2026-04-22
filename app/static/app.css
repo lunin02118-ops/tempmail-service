@@ -329,21 +329,31 @@ select:focus {
   gap: 8px;
   align-items: center;
   max-width: 100%;
+  border: 0;
   padding: 9px 12px;
   border-radius: 999px;
   background: var(--ink);
   color: #fff7e5;
   font-weight: 800;
   word-break: break-all;
+  transition: transform 160ms ease, box-shadow 160ms ease;
 }
 
-.mailbox-pill button {
-  border: 0;
+.mailbox-pill:hover,
+.mailbox-pill:focus-visible {
+  outline: none;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(25, 35, 49, 0.16);
+}
+
+.copy-pill-action {
   border-radius: 999px;
   padding: 5px 8px;
   background: var(--mint);
   color: var(--ink);
+  font-size: 0.84rem;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .empty {
@@ -414,13 +424,29 @@ select:focus {
 }
 
 .message-meta span,
+.meta-pill,
 .tag {
+  border: 0;
   padding: 5px 9px;
   border-radius: 999px;
   background: rgba(25, 35, 49, 0.08);
   color: var(--ink);
   font-size: 0.82rem;
   font-weight: 800;
+}
+
+.meta-pill {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: left;
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.meta-pill:hover,
+.meta-pill:focus-visible {
+  outline: none;
+  background: rgba(196, 240, 106, 0.46);
+  transform: translateY(-1px);
 }
 
 .code-pill {
@@ -517,6 +543,19 @@ select:focus {
   background: rgba(196, 240, 106, 0.22);
 }
 
+.detail-box--code.is-copyable {
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.detail-box--code.is-copyable:hover,
+.detail-box--code.is-copyable:focus-visible {
+  border-color: rgba(25, 35, 49, 0.18);
+  outline: none;
+  box-shadow: 0 14px 28px rgba(25, 35, 49, 0.12);
+  transform: translateY(-1px);
+}
+
 .detail-box small {
   display: block;
   margin-bottom: 4px;
@@ -562,6 +601,7 @@ select:focus {
 }
 
 .mini-copy {
+  display: inline-flex;
   border: 0;
   border-radius: 999px;
   padding: 6px 10px;

@@ -256,10 +256,10 @@ function renderMailboxes() {
   el.mailboxStrip.innerHTML = state.mailboxes
     .map(
       (mailbox) => `
-        <span class="mailbox-pill">
+        <button class="mailbox-pill" type="button" data-copy="${escapeHtml(mailbox.address)}" aria-label="Copy email ${escapeHtml(mailbox.address)}">
           <span>${escapeHtml(mailbox.address)}</span>
-          <button type="button" data-copy="${escapeHtml(mailbox.address)}">Copy</button>
-        </span>
+          <span class="copy-pill-action" aria-hidden="true">Copy</span>
+        </button>
       `,
     )
     .join("");
@@ -297,7 +297,7 @@ function renderMessages({ updateStatus = true } = {}) {
           <div class="message-meta">
             ${otp}
             <span>${escapeHtml(message.ai_status || "pending")}</span>
-            <span>${escapeHtml(message.mailbox_address)}</span>
+            <button class="meta-pill" type="button" data-copy="${escapeHtml(message.mailbox_address)}" aria-label="Copy email ${escapeHtml(message.mailbox_address)}">${escapeHtml(message.mailbox_address)}</button>
           </div>
         </article>
       `;
@@ -339,11 +339,11 @@ function renderDetail(message) {
       <span>${escapeHtml(actionRequired)}</span>
     </div>
     <div class="detail-grid">
-      <div class="detail-box detail-box--code">
+      <div class="detail-box detail-box--code${code ? " is-copyable" : ""}" ${code ? `role="button" tabindex="0" data-copy-code="${escapeHtml(code)}" aria-label="Copy code ${escapeHtml(code)}"` : ""}>
         <small>Code</small>
         <div class="code-detail-row">
           <strong>${escapeHtml(code || "none")}</strong>
-          ${code ? `<button class="mini-copy" type="button" data-copy-code="${escapeHtml(code)}">Copy</button>` : ""}
+          ${code ? '<span class="mini-copy" aria-hidden="true">Copy</span>' : ""}
         </div>
       </div>
       <div class="detail-box">
@@ -528,6 +528,13 @@ el.messageList.addEventListener("click", (event) => {
     return;
   }
 
+  const addressButton = event.target.closest("[data-copy]");
+  if (addressButton) {
+    event.stopPropagation();
+    copyAddress(addressButton.dataset.copy).catch((error) => setStatus(error.message, "error"));
+    return;
+  }
+
   const card = event.target.closest("[data-message-id]");
   if (!card) {
     return;
@@ -551,6 +558,17 @@ el.messageDetail.addEventListener("click", (event) => {
     return;
   }
   copyCode(copyButton.dataset.copyCode).catch((error) => setStatus(error.message, "error"));
+});
+el.messageDetail.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+  const copyTarget = event.target.closest("[data-copy-code]");
+  if (!copyTarget) {
+    return;
+  }
+  event.preventDefault();
+  copyCode(copyTarget.dataset.copyCode).catch((error) => setStatus(error.message, "error"));
 });
 el.mailboxStrip.addEventListener("click", (event) => {
   const button = event.target.closest("[data-copy]");

@@ -70,6 +70,11 @@ def test_web_app_and_client_config_do_not_expose_private_turnstile_secret(tmp_pa
     assert "No plain-text body captured" not in script_response.text
     assert "action-link" in script_response.text
     assert "Signal brief" in index_response.text
+    assert 'class="mailbox-pill" type="button" data-copy=' in script_response.text
+    assert 'class="meta-pill" type="button" data-copy=' in script_response.text
+    assert 'role="button" tabindex="0" data-copy-code=' in script_response.text
+    assert ".meta-pill" in style_response.text
+    assert ".detail-box--code.is-copyable" in style_response.text
 
     assert config_response.status_code == 200
     payload = config_response.json()
