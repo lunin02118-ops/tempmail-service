@@ -1,0 +1,4 @@
+APP_INGEST_URL=https://your-render-app.onrender.com/ingest/messages
+PUBLIC_MAIL_DOMAIN=samgpt.me
+MAX_RAW_BYTES=1048576
+INGEST_WEBHOOK_SECRET=change-me
