@@ -61,6 +61,76 @@ function normalizeLink(value) {
   return "";
 }
 
+function uniqueLinks(values) {
+  const seen = new Set();
+  return values
+    .map(normalizeLink)
+    .filter(Boolean)
+    .filter((link) => {
+      if (seen.has(link)) {
+        return false;
+      }
+      seen.add(link);
+      return true;
+    });
+}
+
+function describeLink(link) {
+  try {
+    const url = new URL(link);
+    const host = url.hostname.replace(/^www\./, "");
+    const pathParts = url.pathname.split("/").filter(Boolean);
+    const path = pathParts.length ? `/${pathParts.slice(0, 2).join("/")}` : "Open secure link";
+    const suffix = url.search ? "..." : "";
+    return {
+      host,
+      path: `${path}${suffix}`,
+    };
+  } catch {
+    return {
+      host: "Action link",
+      path: "Open secure link",
+    };
+  }
+}
+
+function titleizeBrand(value) {
+  const clean = String(value || "").trim();
+  const known = {
+    chatgpt: "ChatGPT",
+    github: "GitHub",
+    google: "Google",
+    mandrillapp: "Mail relay",
+    openai: "OpenAI",
+    sendgrid: "Mail relay",
+  };
+  if (known[clean.toLowerCase()]) {
+    return known[clean.toLowerCase()];
+  }
+  return clean.replace(/(^|[-_.\s])([a-z])/g, (_, separator, letter) => `${separator}${letter.toUpperCase()}`);
+}
+
+function parseEmailDomain(value) {
+  const match = String(value || "").match(/[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,})/i);
+  return match ? match[1].toLowerCase() : "";
+}
+
+function describeSender(message, analysis) {
+  const brand = analysis.sender_brand || message.sender_brand || "";
+  const fromAddress = message.from_address || "";
+  const domain = parseEmailDomain(fromAddress);
+  if (brand) {
+    return {
+      name: titleizeBrand(brand),
+      detail: domain ? `via ${domain}` : fromAddress,
+    };
+  }
+  return {
+    name: domain || fromAddress || "Unknown sender",
+    detail: domain && fromAddress ? fromAddress : "",
+  };
+}
+
 async function writeClipboard(value) {
   const text = String(value ?? "");
   if (navigator.clipboard?.writeText) {
@@ -238,19 +308,38 @@ function renderMessages({ updateStatus = true } = {}) {
 function renderDetail(message) {
   const analysis = message.analysis || {};
   const code = analysis.otp_code || message.otp_code || "";
-  const links = (analysis.action_links || []).map(normalizeLink).filter(Boolean);
+  const links = uniqueLinks(analysis.action_links || []).slice(0, 4);
   const linkHtml = links.length
-    ? `<div class="link-list">${links
-        .map((link) => `<a href="${escapeHtml(link)}" target="_blank" rel="noreferrer">${escapeHtml(link)}</a>`)
+    ? `<div class="action-list">${links
+        .map((link) => {
+          const meta = describeLink(link);
+          return `
+            <a class="action-link" href="${escapeHtml(link)}" target="_blank" rel="noreferrer">
+              <span>
+                <strong>${escapeHtml(meta.host)}</strong>
+                <small>${escapeHtml(meta.path)}</small>
+              </span>
+              <em>Open</em>
+            </a>
+          `;
+        })
         .join("")}</div>`
-    : "<p>No action links found.</p>";
+    : '<div class="detail-empty">No clean action links found.</div>';
+  const actionRequired = analysis.action_required || (code ? "Use the verification code" : "Review the message");
+  const sender = describeSender(message, analysis);
 
   el.analyze.disabled = false;
   el.messageDetail.className = "message-detail";
   el.messageDetail.innerHTML = `
-    <div class="detail-subject">${escapeHtml(message.subject || "No subject")}</div>
+    <div class="detail-heading">
+      <small>Subject</small>
+      <h3>${escapeHtml(message.subject || "No subject")}</h3>
+    </div>
+    <div class="detail-callout">
+      <span>${escapeHtml(actionRequired)}</span>
+    </div>
     <div class="detail-grid">
-      <div class="detail-box">
+      <div class="detail-box detail-box--code">
         <small>Code</small>
         <div class="code-detail-row">
           <strong>${escapeHtml(code || "none")}</strong>
@@ -261,24 +350,24 @@ function renderDetail(message) {
         <small>Analyzer</small>
         <strong>${escapeHtml(analysis.provider || "pending")} / ${escapeHtml(analysis.status || "unknown")}</strong>
       </div>
-      <div class="detail-box">
+      <div class="detail-box detail-box--wide">
         <small>From</small>
-        <strong>${escapeHtml(message.from_address || "unknown")}</strong>
+        <strong>${escapeHtml(sender.name)}</strong>
+        ${sender.detail ? `<span class="detail-secondary">${escapeHtml(sender.detail)}</span>` : ""}
       </div>
-      <div class="detail-box">
+      <div class="detail-box detail-box--wide">
         <small>Received</small>
         <strong>${formatDate(message.received_at)}</strong>
       </div>
     </div>
-    <div class="detail-box">
+    <div class="detail-box detail-box--summary">
       <small>Summary</small>
-      <strong>${escapeHtml(analysis.summary || message.ai_summary || "No summary yet.")}</strong>
+      <p>${escapeHtml(analysis.summary || message.ai_summary || "No summary yet.")}</p>
     </div>
-    <div class="detail-box">
+    <div class="detail-box detail-box--links">
       <small>Action links</small>
       ${linkHtml}
     </div>
-    <pre class="body-preview">${escapeHtml(message.body_text || "No plain-text body captured.")}</pre>
   `;
 }
 

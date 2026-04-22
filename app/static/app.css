@@ -145,7 +145,7 @@ h2 {
 
 .workspace {
   display: grid;
-  grid-template-columns: 380px minmax(360px, 1fr) 420px;
+  grid-template-columns: 380px minmax(360px, 1fr) minmax(360px, 420px);
   gap: 18px;
   align-items: start;
 }
@@ -441,7 +441,7 @@ select:focus {
 
 .message-detail {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .message-detail.empty {
@@ -455,23 +455,66 @@ select:focus {
   font-weight: 800;
 }
 
-.detail-subject {
+.reader {
+  overflow: hidden;
+}
+
+.reader h2 {
+  font-size: clamp(2rem, 2.7vw, 2.8rem);
+}
+
+.detail-heading {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.detail-heading small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.detail-heading h3 {
+  margin: 0;
   font-family: var(--display);
-  font-size: clamp(2rem, 4vw, 3.7rem);
-  line-height: 0.95;
-  letter-spacing: -0.06em;
+  font-size: clamp(1.65rem, 2.3vw, 2.35rem);
+  line-height: 1;
+  letter-spacing: -0.045em;
+  overflow-wrap: anywhere;
+}
+
+.detail-callout {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 11px 13px;
+  border: 1px solid rgba(229, 75, 42, 0.18);
+  border-radius: 18px;
+  background: rgba(229, 75, 42, 0.08);
+  color: var(--signal-dark);
+  font-weight: 800;
+  line-height: 1.25;
 }
 
 .detail-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 10px;
 }
 
 .detail-box {
+  min-width: 0;
   padding: 13px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.56);
+}
+
+.detail-box--code {
+  border: 1px solid rgba(25, 35, 49, 0.08);
+  background: rgba(196, 240, 106, 0.22);
 }
 
 .detail-box small {
@@ -483,11 +526,39 @@ select:focus {
   text-transform: uppercase;
 }
 
+.detail-box strong,
+.detail-box p {
+  overflow-wrap: anywhere;
+}
+
+.detail-secondary {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.detail-box p {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .code-detail-row {
   display: flex;
   gap: 10px;
   align-items: center;
   justify-content: space-between;
+  min-width: 0;
+}
+
+.code-detail-row strong {
+  font-size: 1.35rem;
+  letter-spacing: 0.02em;
 }
 
 .mini-copy {
@@ -506,25 +577,77 @@ select:focus {
   box-shadow: 0 8px 18px rgba(25, 35, 49, 0.14);
 }
 
-.body-preview {
-  overflow: auto;
-  max-height: 320px;
-  padding: 16px;
-  border-radius: 20px;
-  background: #182330;
-  color: #fff7e5;
-  white-space: pre-wrap;
-}
-
-.link-list {
+.action-list {
   display: grid;
   gap: 8px;
 }
 
-.link-list a {
-  color: var(--signal-dark);
+.action-link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid rgba(25, 35, 49, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--ink);
+  text-decoration: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.action-link:hover,
+.action-link:focus-visible {
+  border-color: rgba(229, 75, 42, 0.35);
+  outline: none;
+  box-shadow: 0 12px 24px rgba(25, 35, 49, 0.1);
+  transform: translateY(-1px);
+}
+
+.action-link span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.action-link strong,
+.action-link small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-link strong {
+  font-size: 0.95rem;
   font-weight: 800;
-  word-break: break-all;
+}
+
+.action-link small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.action-link em {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff7e5;
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.detail-empty {
+  padding: 12px;
+  border: 1px dashed rgba(25, 35, 49, 0.16);
+  border-radius: 16px;
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 @keyframes rise-in {

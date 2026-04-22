@@ -6,7 +6,7 @@ import quopri
 import re
 from email.utils import parseaddr
 from itertools import count
-from typing import Any
+from typing import Any, Iterable
 from urllib.parse import urlparse
 
 import httpx
@@ -39,6 +39,15 @@ _ASSET_PATH_MARKERS = (
     "/static/",
     "/assets/",
     "/wf/open",
+)
+_TRACKING_HOST_SUFFIXES = (
+    "mandrillapp.com",
+    "sendgrid.net",
+)
+_TRACKING_PATH_MARKERS = (
+    "/track/click",
+    "/wf/open",
+    "/open?",
 )
 _ASSET_EXTENSIONS = (
     ".png",
@@ -91,28 +100,38 @@ def _normalize_candidate_url(value: str) -> str | None:
         return None
 
     lowered = candidate.lower()
-    if parsed.netloc.lower() == "cdn.openai.com":
+    host = parsed.netloc.lower()
+    path = parsed.path.lower()
+    if host == "cdn.openai.com":
+        return None
+    if any(host == suffix or host.endswith(f".{suffix}") for suffix in _TRACKING_HOST_SUFFIXES):
+        return None
+    if any(marker in path for marker in _TRACKING_PATH_MARKERS):
         return None
     if any(marker in lowered for marker in _ASSET_PATH_MARKERS):
         return None
-    if parsed.path.lower().endswith(_ASSET_EXTENSIONS):
+    if path.endswith(_ASSET_EXTENSIONS):
         return None
     return candidate
+
+
+def _sanitize_action_links(values: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        normalized = _normalize_candidate_url(str(value))
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+    return result[:5]
 
 
 def _extract_action_links(text: str, html_text: str | None = None) -> list[str]:
     matches = list(_URL_RE.findall(text))
     if html_text:
         matches.extend(_HTML_HREF_RE.findall(html_text))
-    seen: set[str] = set()
-    result: list[str] = []
-    for match in matches:
-        normalized = _normalize_candidate_url(match)
-        if not normalized or normalized in seen:
-            continue
-        seen.add(normalized)
-        result.append(normalized)
-    return result[:5]
+    return _sanitize_action_links(matches)
 
 
 def _extract_sender_brand(from_address: str | None) -> str | None:
@@ -377,6 +396,7 @@ class MessageAnalysisService:
         action_links = groq_payload.get("action_links")
         if not isinstance(action_links, list):
             action_links = json.loads(str(deterministic.get("action_links_json") or "[]"))
+        action_links = _sanitize_action_links(str(item) for item in action_links)
 
         return {
             "provider": "groq",
@@ -387,7 +407,7 @@ class MessageAnalysisService:
             "otp_code": str(groq_payload.get("otp_code") or deterministic.get("otp_code") or "") or None,
             "action_required": str(groq_payload.get("action_required") or deterministic.get("action_required") or "")
             or None,
-            "action_links_json": json.dumps([str(item) for item in action_links][:5]),
+            "action_links_json": json.dumps(action_links),
             "sender_brand": str(groq_payload.get("sender_brand") or deterministic.get("sender_brand") or "") or None,
             "confidence": str(groq_payload.get("confidence") or deterministic.get("confidence") or ""),
             "error_text": None,

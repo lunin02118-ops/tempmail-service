@@ -1,5 +1,8 @@
+import json
+
 from fastapi.testclient import TestClient
 
+from app.config import AppSettings
 from app.main import create_app
 from app.services.ai_service import MessageAnalysisService
 
@@ -63,6 +66,10 @@ def test_web_app_and_client_config_do_not_expose_private_turnstile_secret(tmp_pa
     assert "data-copy-code" in script_response.text
     assert "OTP ${escapeHtml(message.otp_code)}" not in script_response.text
     assert "<small>Code</small>" in script_response.text
+    assert "body-preview" not in script_response.text
+    assert "No plain-text body captured" not in script_response.text
+    assert "action-link" in script_response.text
+    assert "Signal brief" in index_response.text
 
     assert config_response.status_code == 200
     payload = config_response.json()
@@ -199,6 +206,33 @@ def test_create_mailbox_rejects_domain_outside_allowed_list(tmp_path, monkeypatc
 
     assert response.status_code == 422
     assert response.json()["detail"] == "requested_domain is not available"
+
+
+def test_analysis_filters_tracking_and_asset_links(tmp_path, monkeypatch):
+    setup_tempmail_env(tmp_path, monkeypatch)
+    service = MessageAnalysisService(AppSettings.from_env())
+
+    result = service.analyze_deterministically(
+        {
+            "from_address": "OpenAI <noreply@openai.com>",
+            "subject": "Your ChatGPT code",
+            "body_text": (
+                "Use code 123456. Manage it at https://chatgpt.com/account/manage?account_id=abc "
+                "Track https://mandrillapp.com/track/click/123/openai.com?p=token "
+                "Pixel https://u20216706.ct.sendgrid.net/wf/open?upn=abc "
+                "Logo https://cdn.openai.com/API/logo-assets/openai-logo.svg"
+            ),
+            "body_html": '<a href="https://help.openai.com/en/">Help center</a>',
+        }
+    )
+
+    links = json.loads(str(result["action_links_json"]))
+
+    assert "https://chatgpt.com/account/manage?account_id=abc" in links
+    assert "https://help.openai.com/en/" in links
+    assert all("mandrillapp.com" not in link for link in links)
+    assert all("sendgrid.net" not in link for link in links)
+    assert all("cdn.openai.com" not in link for link in links)
 
 
 def test_ingest_triggers_auto_remote_analysis_when_groq_is_configured(tmp_path, monkeypatch):
