@@ -4,6 +4,8 @@ import argparse
 import threading
 
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from app.api.aliases import router as aliases_router
@@ -20,9 +22,25 @@ def create_app(telegram_client=None) -> FastAPI:
     set_telegram_client_dependency(telegram_client)
 
     app = FastAPI(title="mail-telegram-app")
+    static_dir = settings.project_root / "app" / "static"
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
     app.include_router(aliases_router)
     app.include_router(tempmail_router)
     app.include_router(telegram_router)
+
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+    def web_app() -> HTMLResponse:
+        index_path = static_dir / "index.html"
+        return HTMLResponse(index_path.read_text(encoding="utf-8"))
+
+    @app.get("/client-config")
+    def client_config() -> dict[str, object]:
+        return {
+            "mail_domain": settings.active_mail_domain,
+            "mailbox_default_ttl_minutes": settings.mailbox_default_ttl_minutes,
+            "turnstile_site_key": settings.turnstile_site_key,
+            "turnstile_enabled": bool(settings.turnstile_secret_key),
+        }
 
     @app.get("/health")
     def health() -> dict[str, str]:

@@ -36,6 +36,33 @@ def test_create_mailbox_sets_session_and_lists_mailboxes(tmp_path, monkeypatch):
     assert listed[0]["address"] == payload["mailbox"]["address"]
 
 
+def test_web_app_and_client_config_do_not_expose_private_turnstile_secret(tmp_path, monkeypatch):
+    setup_tempmail_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("TURNSTILE_SITE_KEY", "public-site-key")
+    monkeypatch.setenv("TURNSTILE_SECRET_KEY", "private-secret-key")
+    client = TestClient(create_app())
+
+    index_response = client.get("/")
+    config_response = client.get("/client-config")
+    script_response = client.get("/static/app.js")
+    style_response = client.get("/static/app.css")
+
+    assert index_response.status_code == 200
+    assert "SamGPT Temp Mail" in index_response.text
+    assert "private-secret-key" not in index_response.text
+    assert script_response.status_code == 200
+    assert style_response.status_code == 200
+    assert "private-secret-key" not in script_response.text
+    assert "private-secret-key" not in style_response.text
+
+    assert config_response.status_code == 200
+    payload = config_response.json()
+    assert payload["mail_domain"] == "samgpt.me"
+    assert payload["turnstile_site_key"] == "public-site-key"
+    assert payload["turnstile_enabled"] is True
+    assert "private-secret-key" not in config_response.text
+
+
 def test_ingested_message_appears_in_unified_and_mailbox_inbox(tmp_path, monkeypatch):
     setup_tempmail_env(tmp_path, monkeypatch)
     client = TestClient(create_app())

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>SamGPT Temp Mail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/app.css" />
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+    <main class="page-shell">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">disposable inbox / ai signal desk</p>
+          <h1>Burner mail with a clean radar.</h1>
+          <p class="lede">
+            Spin up a temporary address, catch verification codes through Cloudflare Email Routing,
+            and let the analyzer pull OTPs and action links out of the noise.
+          </p>
+        </div>
+        <div class="signal-card" aria-label="Live system status">
+          <span class="pulse-dot"></span>
+          <div>
+            <strong>Live pipe</strong>
+            <small>Cloudflare MX -> Worker -> Render -> Neon</small>
+          </div>
+        </div>
+      </section>
+
+      <section class="workspace" aria-label="Temporary mailbox workspace">
+        <aside class="composer panel">
+          <div class="panel-header">
+            <p class="kicker">01 / create</p>
+            <h2>New mailbox</h2>
+          </div>
+          <form id="mailbox-form" class="mailbox-form">
+            <label>
+              Local part
+              <div class="address-row">
+                <input
+                  id="local-part"
+                  name="local_part"
+                  autocomplete="off"
+                  inputmode="latin"
+                  maxlength="32"
+                  placeholder="random or custom"
+                />
+                <span id="domain-label">@...</span>
+              </div>
+            </label>
+            <label>
+              Label
+              <input id="description" name="description" autocomplete="off" placeholder="signup, test, throwaway" />
+            </label>
+            <label>
+              Lifetime
+              <select id="ttl" name="ttl">
+                <option value="30">30 minutes</option>
+                <option value="60" selected>1 hour</option>
+                <option value="240">4 hours</option>
+                <option value="1440">24 hours</option>
+              </select>
+            </label>
+            <div id="turnstile-slot" class="turnstile-slot" aria-live="polite">
+              <span>Checking human gate...</span>
+            </div>
+            <button class="primary-action" type="submit">
+              <span>Create address</span>
+              <span aria-hidden="true">-></span>
+            </button>
+          </form>
+          <p class="form-note">
+            Session is stored in this browser. Use it like a quiet little pocket universe.
+          </p>
+        </aside>
+
+        <section class="inbox panel">
+          <div class="panel-header split">
+            <div>
+              <p class="kicker">02 / monitor</p>
+              <h2>Inbox</h2>
+            </div>
+            <button id="refresh" class="ghost-action" type="button">Refresh</button>
+          </div>
+
+          <div id="mailbox-strip" class="mailbox-strip empty">
+            <span>No mailbox yet</span>
+          </div>
+
+          <div id="status" class="status" role="status">Create a mailbox to begin.</div>
+          <div id="message-list" class="message-list" aria-live="polite"></div>
+        </section>
+
+        <section class="reader panel">
+          <div class="panel-header split">
+            <div>
+              <p class="kicker">03 / extract</p>
+              <h2>Message radar</h2>
+            </div>
+            <button id="analyze" class="ghost-action" type="button" disabled>Analyze</button>
+          </div>
+          <article id="message-detail" class="message-detail empty">
+            <span class="empty-mark">No message selected</span>
+            <p>Incoming OTPs, links, sender, and body preview will land here.</p>
+          </article>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>
