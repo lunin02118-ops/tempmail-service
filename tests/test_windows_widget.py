@@ -85,3 +85,10 @@ def test_load_saved_settings_ignores_runtime_only_flags(tmp_path):
     assert loaded["always_on_top"] is True
     assert "debug" not in loaded
     assert "close_after" not in loaded
+
+
+def test_resolve_settings_clamps_small_dimensions():
+    settings = resolve_settings({"width": 360, "height": 420}, {})
+
+    assert settings.width == 420
+    assert settings.height == 560

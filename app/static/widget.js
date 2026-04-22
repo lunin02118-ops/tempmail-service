@@ -11,6 +11,7 @@ const widgetState = {
   sessionToken: localStorage.getItem("tempmail.sessionToken") || "",
   turnstileToken: "",
   turnstileWidgetId: null,
+  selectedDomain: "",
   mailboxes: [],
   messages: [],
   lastSeenMessageId: Number(localStorage.getItem("tempmail.widget.lastSeenMessageId") || "0"),
@@ -19,7 +20,13 @@ const widgetState = {
 
 const widgetEl = {
   form: document.querySelector("#widget-form"),
-  domainSelect: document.querySelector("#domain-select"),
+  domainPicker: document.querySelector("#domain-picker"),
+  domainValue: document.querySelector("#domain-value"),
+  domainTrigger: document.querySelector("#domain-trigger"),
+  domainCurrent: document.querySelector("#domain-current"),
+  domainPanel: document.querySelector("#domain-panel"),
+  domainCount: document.querySelector("#domain-count"),
+  domainOptionList: document.querySelector("#domain-option-list"),
   generate: document.querySelector("#generate"),
   turnstileSlot: document.querySelector("#turnstile-slot"),
   addressCard: document.querySelector("#address-card"),
@@ -83,21 +90,71 @@ function getAvailableDomains() {
   return widgetState.config?.mail_domain ? [widgetState.config.mail_domain] : [];
 }
 
+function closeDomainPicker() {
+  widgetEl.domainPicker.dataset.open = "false";
+  widgetEl.domainPanel.classList.add("is-hidden");
+  widgetEl.domainTrigger.setAttribute("aria-expanded", "false");
+}
+
+function openDomainPicker() {
+  if (widgetEl.domainTrigger.disabled) {
+    return;
+  }
+  widgetEl.domainPicker.dataset.open = "true";
+  widgetEl.domainPanel.classList.remove("is-hidden");
+  widgetEl.domainTrigger.setAttribute("aria-expanded", "true");
+}
+
+function setSelectedDomain(domain) {
+  widgetState.selectedDomain = domain;
+  widgetEl.domainValue.value = domain;
+  widgetEl.domainCurrent.textContent = domain ? `@${domain}` : "@domain";
+
+  for (const option of widgetEl.domainOptionList.querySelectorAll("[data-domain-value]")) {
+    const isActive = option.dataset.domainValue === domain;
+    option.classList.toggle("is-active", isActive);
+    option.setAttribute("aria-selected", String(isActive));
+  }
+}
+
 function renderDomainOptions() {
   const domains = getAvailableDomains();
-  widgetEl.domainSelect.innerHTML = domains
-    .map((domain) => `<option value="${escapeHtml(domain)}">@${escapeHtml(domain)}</option>`)
+  widgetEl.domainCount.textContent = `${domains.length} domain${domains.length === 1 ? "" : "s"}`;
+  widgetEl.domainOptionList.innerHTML = domains
+    .map((domain, index) => {
+      const isDefault = domain === widgetState.config?.mail_domain || (!widgetState.config?.mail_domain && index === 0);
+      return `
+        <button
+          class="domain-option"
+          type="button"
+          role="option"
+          aria-selected="false"
+          data-domain-value="${escapeHtml(domain)}"
+        >
+          <span class="domain-option-label">@${escapeHtml(domain)}</span>
+          ${isDefault ? '<small class="domain-option-badge">default</small>' : ""}
+        </button>
+      `;
+    })
     .join("");
 
   if (!domains.length) {
-    widgetEl.domainSelect.innerHTML = '<option value="">@domain</option>';
-    widgetEl.domainSelect.disabled = true;
+    widgetEl.domainCurrent.textContent = "@domain";
+    widgetEl.domainValue.value = "";
+    widgetEl.domainTrigger.disabled = true;
     widgetEl.generate.disabled = true;
+    closeDomainPicker();
     return;
   }
 
-  widgetEl.domainSelect.disabled = domains.length <= 1;
-  widgetEl.domainSelect.value = domains.includes(widgetState.config?.mail_domain) ? widgetState.config.mail_domain : domains[0];
+  widgetEl.domainTrigger.disabled = domains.length <= 1;
+  const preferredDomain = domains.includes(widgetState.selectedDomain)
+    ? widgetState.selectedDomain
+    : domains.includes(widgetState.config?.mail_domain)
+      ? widgetState.config.mail_domain
+      : domains[0];
+  setSelectedDomain(preferredDomain);
+  closeDomainPicker();
 }
 
 async function api(path, options = {}) {
@@ -139,8 +196,10 @@ function renderTurnstile() {
   }
 
   widgetEl.turnstileSlot.classList.remove("is-hidden");
+  widgetEl.turnstileSlot.dataset.state = "loading";
   if (!widgetState.config.turnstile_site_key) {
     widgetEl.turnstileSlot.innerHTML = "<span>Turnstile site key is not configured.</span>";
+    widgetEl.turnstileSlot.dataset.state = "error";
     return;
   }
 
@@ -152,21 +211,33 @@ function renderTurnstile() {
   widgetEl.turnstileSlot.innerHTML = "";
   widgetState.turnstileWidgetId = window.turnstile.render(widgetEl.turnstileSlot, {
     sitekey: widgetState.config.turnstile_site_key,
+    theme: isNativeShell ? "dark" : "auto",
+    size: isNativeShell ? "flexible" : "normal",
     callback(token) {
       widgetState.turnstileToken = token;
+      widgetEl.turnstileSlot.dataset.state = "verified";
     },
     "expired-callback"() {
       widgetState.turnstileToken = "";
+      widgetEl.turnstileSlot.dataset.state = "expired";
     },
-    "error-callback"() {
+    "error-callback"(errorCode) {
       widgetState.turnstileToken = "";
-      setWidgetStatus("Human gate needs another try.", "error");
+      widgetEl.turnstileSlot.dataset.state = "error";
+      const suffix = errorCode ? ` (${errorCode})` : "";
+      setWidgetStatus(`Human gate needs another try${suffix}.`, "error");
+    },
+    "unsupported-callback"() {
+      widgetState.turnstileToken = "";
+      widgetEl.turnstileSlot.dataset.state = "unsupported";
+      setWidgetStatus("Human gate is blocked by the embedded browser. Relaunch after the widget update.", "error");
     },
   });
 }
 
 function resetTurnstile() {
   widgetState.turnstileToken = "";
+  widgetEl.turnstileSlot.dataset.state = "idle";
   if (window.turnstile && widgetState.turnstileWidgetId !== null) {
     window.turnstile.reset(widgetState.turnstileWidgetId);
   }
@@ -275,7 +346,7 @@ async function createMailbox(event) {
     expires_in_minutes: widgetState.config?.mailbox_default_ttl_minutes || 60,
     local_part_length: 10,
   };
-  const requestedDomain = widgetEl.domainSelect.value.trim();
+  const requestedDomain = widgetState.selectedDomain.trim();
   if (requestedDomain) {
     body.requested_domain = requestedDomain;
   }
@@ -335,6 +406,21 @@ async function bootWidget() {
 }
 
 widgetEl.form.addEventListener("submit", createMailbox);
+widgetEl.domainTrigger.addEventListener("click", () => {
+  if (widgetEl.domainPanel.classList.contains("is-hidden")) {
+    openDomainPicker();
+  } else {
+    closeDomainPicker();
+  }
+});
+widgetEl.domainOptionList.addEventListener("click", (event) => {
+  const option = event.target.closest("[data-domain-value]");
+  if (!option) {
+    return;
+  }
+  setSelectedDomain(option.dataset.domainValue || "");
+  closeDomainPicker();
+});
 widgetEl.refresh.addEventListener("click", () => {
   loadInbox().catch((error) => setWidgetStatus(error.message, "error"));
 });
@@ -350,6 +436,16 @@ widgetEl.codeList.addEventListener("click", (event) => {
     return;
   }
   copyCode(codeButton.dataset.copyCode).catch((error) => setWidgetStatus(error.message, "error"));
+});
+document.addEventListener("click", (event) => {
+  if (!widgetEl.domainPicker.contains(event.target)) {
+    closeDomainPicker();
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeDomainPicker();
+  }
 });
 
 bootWidget().catch((error) => setWidgetStatus(error.message, "error"));

@@ -244,7 +244,7 @@ def create_window(settings: WidgetSettings) -> webview.Window:
         x=settings.x,
         y=settings.y,
         resizable=True,
-        min_size=(360, 420),
+        min_size=(420, 560),
         frameless=True,
         easy_drag=True,
         shadow=True,
@@ -290,9 +290,9 @@ def main() -> None:
         target=bootstrap_native_shell, args=(window, settings), daemon=True
     ).start()
 
+    # Keep the default browser UA so Cloudflare Turnstile sees a normal WebView2/Edge client.
     webview.start(
         debug=settings.debug,
-        user_agent=f"{APP_NAME}/1.0",
         private_mode=False,
         storage_path=str(webview_storage_dir()),
     )

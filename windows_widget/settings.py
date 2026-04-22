@@ -9,6 +9,8 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 APP_NAME = "SamGPTDesktopWidget"
 DEFAULT_WIDGET_URL = "https://tempmail-web.onrender.com/widget"
+MIN_WIDGET_WIDTH = 420
+MIN_WIDGET_HEIGHT = 560
 PERSISTED_SETTING_KEYS = (
     "url",
     "width",
@@ -89,5 +91,7 @@ def resolve_settings(saved: dict[str, Any], overrides: dict[str, Any]) -> Widget
     merged = asdict(WidgetSettings())
     merged.update({key: value for key, value in saved.items() if key in merged})
     merged.update({key: value for key, value in overrides.items() if key in merged and value is not None})
+    merged["width"] = max(int(merged["width"]), MIN_WIDGET_WIDTH)
+    merged["height"] = max(int(merged["height"]), MIN_WIDGET_HEIGHT)
     merged["url"] = normalize_widget_url(str(merged["url"]))
     return WidgetSettings(**merged)

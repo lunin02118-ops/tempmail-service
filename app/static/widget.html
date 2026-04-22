@@ -33,9 +33,34 @@
         </header>
 
         <form id="widget-form" class="generator">
-          <label>
-            Domain
-            <select id="domain-select" name="domain" aria-label="Mailbox domain"></select>
+          <label class="domain-field">
+            <span>Domain</span>
+            <div id="domain-picker" class="domain-picker">
+              <input id="domain-value" name="domain" type="hidden" value="" />
+              <button
+                id="domain-trigger"
+                class="domain-trigger"
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+                disabled
+              >
+                <span id="domain-current" class="domain-current">@domain</span>
+                <span class="domain-chevron" aria-hidden="true"></span>
+              </button>
+              <div id="domain-panel" class="domain-panel is-hidden">
+                <div class="domain-panel-head">
+                  <strong>Choose domain</strong>
+                  <small id="domain-count">0 domains</small>
+                </div>
+                <div
+                  id="domain-option-list"
+                  class="domain-option-list"
+                  role="listbox"
+                  aria-label="Mailbox domain options"
+                ></div>
+              </div>
+            </div>
           </label>
           <button id="generate" type="submit">Generate address</button>
         </form>
