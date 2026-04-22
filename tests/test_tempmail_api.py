@@ -60,6 +60,9 @@ def test_web_app_and_client_config_do_not_expose_private_turnstile_secret(tmp_pa
     assert worker_response.status_code == 200
     assert "private-secret-key" not in script_response.text
     assert "private-secret-key" not in style_response.text
+    assert "data-copy-code" in script_response.text
+    assert "OTP ${escapeHtml(message.otp_code)}" not in script_response.text
+    assert "<small>Code</small>" in script_response.text
 
     assert config_response.status_code == 200
     payload = config_response.json()

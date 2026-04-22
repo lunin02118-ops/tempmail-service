@@ -61,6 +61,24 @@ function normalizeLink(value) {
   return "";
 }
 
+async function writeClipboard(value) {
+  const text = String(value ?? "");
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.top = "-9999px";
+  document.body.append(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
+}
+
 function getAvailableDomains() {
   const domains = Array.isArray(state.config?.mail_domains) ? state.config.mail_domains : [];
   if (domains.length) {
@@ -193,10 +211,12 @@ function renderMessages({ updateStatus = true } = {}) {
     .map((message) => {
       const selected = message.id === state.selectedMessageId ? " is-selected" : "";
       const unread = message.is_unread ? '<span class="unread-dot" aria-label="Unread"></span>' : "";
-      const otp = message.otp_code ? `<span class="code-pill">OTP ${escapeHtml(message.otp_code)}</span>` : "";
+      const otp = message.otp_code
+        ? `<button class="code-pill" type="button" data-copy-code="${escapeHtml(message.otp_code)}" aria-label="Copy code ${escapeHtml(message.otp_code)}">${escapeHtml(message.otp_code)}</button>`
+        : "";
       const sender = message.sender_brand || message.from_address || "unknown sender";
       return `
-        <button class="message-card${selected}" type="button" data-message-id="${message.id}">
+        <article class="message-card${selected}" role="button" tabindex="0" data-message-id="${message.id}">
           <header>
             <div>
               <strong>${escapeHtml(message.subject || "No subject")}</strong>
@@ -209,7 +229,7 @@ function renderMessages({ updateStatus = true } = {}) {
             <span>${escapeHtml(message.ai_status || "pending")}</span>
             <span>${escapeHtml(message.mailbox_address)}</span>
           </div>
-        </button>
+        </article>
       `;
     })
     .join("");
@@ -217,6 +237,7 @@ function renderMessages({ updateStatus = true } = {}) {
 
 function renderDetail(message) {
   const analysis = message.analysis || {};
+  const code = analysis.otp_code || message.otp_code || "";
   const links = (analysis.action_links || []).map(normalizeLink).filter(Boolean);
   const linkHtml = links.length
     ? `<div class="link-list">${links
@@ -230,8 +251,11 @@ function renderDetail(message) {
     <div class="detail-subject">${escapeHtml(message.subject || "No subject")}</div>
     <div class="detail-grid">
       <div class="detail-box">
-        <small>OTP</small>
-        <strong>${escapeHtml(analysis.otp_code || message.otp_code || "none")}</strong>
+        <small>Code</small>
+        <div class="code-detail-row">
+          <strong>${escapeHtml(code || "none")}</strong>
+          ${code ? `<button class="mini-copy" type="button" data-copy-code="${escapeHtml(code)}">Copy</button>` : ""}
+        </div>
       </div>
       <div class="detail-box">
         <small>Analyzer</small>
@@ -361,8 +385,13 @@ async function createMailbox(event) {
 }
 
 async function copyAddress(address) {
-  await navigator.clipboard.writeText(address);
+  await writeClipboard(address);
   setStatus(`Copied ${address}`, "success");
+}
+
+async function copyCode(code) {
+  await writeClipboard(code);
+  setStatus(`Copied code ${code}`, "success");
 }
 
 async function boot() {
@@ -403,11 +432,36 @@ el.analyze.addEventListener("click", () => {
   analyzeSelectedMessage().catch((error) => setStatus(error.message, "error"));
 });
 el.messageList.addEventListener("click", (event) => {
+  const copyButton = event.target.closest("[data-copy-code]");
+  if (copyButton) {
+    event.stopPropagation();
+    copyCode(copyButton.dataset.copyCode).catch((error) => setStatus(error.message, "error"));
+    return;
+  }
+
   const card = event.target.closest("[data-message-id]");
   if (!card) {
     return;
   }
   selectMessage(Number(card.dataset.messageId)).catch((error) => setStatus(error.message, "error"));
+});
+el.messageList.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+  const card = event.target.closest("[data-message-id]");
+  if (!card || event.target.closest("[data-copy-code]")) {
+    return;
+  }
+  event.preventDefault();
+  selectMessage(Number(card.dataset.messageId)).catch((error) => setStatus(error.message, "error"));
+});
+el.messageDetail.addEventListener("click", (event) => {
+  const copyButton = event.target.closest("[data-copy-code]");
+  if (!copyButton) {
+    return;
+  }
+  copyCode(copyButton.dataset.copyCode).catch((error) => setStatus(error.message, "error"));
 });
 el.mailboxStrip.addEventListener("click", (event) => {
   const button = event.target.closest("[data-copy]");
