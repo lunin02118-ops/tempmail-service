@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>SamGPT Desk Widget</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Fraunces:opsz,wght@9..144,700;9..144,850&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/widget.css" />
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+    <script src="/static/widget.js" defer></script>
+  </head>
+  <body>
+    <div class="wallpaper-field" aria-hidden="true">
+      <span class="orb orb-a"></span>
+      <span class="orb orb-b"></span>
+      <span class="scanline"></span>
+    </div>
+
+    <main class="widget-shell" aria-label="Desktop temporary mail widget">
+      <section class="desk-widget">
+        <header class="widget-header">
+          <div>
+            <p class="eyebrow">desktop otp receiver</p>
+            <h1>Desk Mail</h1>
+          </div>
+          <a class="full-link" href="/" target="_blank" rel="noreferrer">Full app</a>
+        </header>
+
+        <form id="widget-form" class="generator">
+          <label>
+            Domain
+            <select id="domain-select" name="domain" aria-label="Mailbox domain"></select>
+          </label>
+          <button id="generate" type="submit">Generate address</button>
+        </form>
+
+        <div id="turnstile-slot" class="turnstile-slot" aria-live="polite">
+          <span>Human gate check...</span>
+        </div>
+
+        <button id="address-card" class="address-card is-empty" type="button" disabled>
+          <small>Current address</small>
+          <strong>No address yet</strong>
+          <span>Generate one to start listening</span>
+        </button>
+
+        <div class="status-row">
+          <span id="status" class="status" role="status">Ready for a new mailbox.</span>
+          <button id="refresh" class="refresh-button" type="button">Sync</button>
+        </div>
+
+        <section class="codes-panel" aria-label="Latest verification codes">
+          <div class="codes-header">
+            <div>
+              <p class="eyebrow">live feed</p>
+              <h2>Latest codes</h2>
+            </div>
+            <span id="poll-indicator" class="poll-indicator">idle</span>
+          </div>
+          <div id="code-list" class="code-list empty">
+            <p>Codes will appear here automatically.</p>
+          </div>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

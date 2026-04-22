@@ -5,5 +5,13 @@
   "display": "standalone",
   "background_color": "#f6ead4",
   "theme_color": "#192331",
-  "description": "Temporary inboxes with OTP extraction and automatic AI analysis."
+  "description": "Temporary inboxes with OTP extraction and automatic AI analysis.",
+  "shortcuts": [
+    {
+      "name": "Desktop widget",
+      "short_name": "Widget",
+      "description": "Compact mailbox and OTP receiver for desktop wallpaper mode.",
+      "url": "/widget"
+    }
+  ]
 }

@@ -48,21 +48,31 @@ def test_web_app_and_client_config_do_not_expose_private_turnstile_secret(tmp_pa
     client = TestClient(create_app())
 
     index_response = client.get("/")
+    widget_response = client.get("/widget")
     config_response = client.get("/client-config")
     script_response = client.get("/static/app.js")
     style_response = client.get("/static/app.css")
+    widget_script_response = client.get("/static/widget.js")
+    widget_style_response = client.get("/static/widget.css")
     manifest_response = client.get("/manifest.webmanifest")
     worker_response = client.get("/service-worker.js")
 
     assert index_response.status_code == 200
+    assert widget_response.status_code == 200
     assert "SamGPT Temp Mail" in index_response.text
+    assert "SamGPT Desk Widget" in widget_response.text
     assert "private-secret-key" not in index_response.text
+    assert "private-secret-key" not in widget_response.text
     assert script_response.status_code == 200
     assert style_response.status_code == 200
+    assert widget_script_response.status_code == 200
+    assert widget_style_response.status_code == 200
     assert manifest_response.status_code == 200
     assert worker_response.status_code == 200
     assert "private-secret-key" not in script_response.text
     assert "private-secret-key" not in style_response.text
+    assert "private-secret-key" not in widget_script_response.text
+    assert "private-secret-key" not in widget_style_response.text
     assert "data-copy-code" in script_response.text
     assert "OTP ${escapeHtml(message.otp_code)}" not in script_response.text
     assert "<small>Code</small>" in script_response.text
@@ -75,6 +85,16 @@ def test_web_app_and_client_config_do_not_expose_private_turnstile_secret(tmp_pa
     assert 'role="button" tabindex="0" data-copy-code=' in script_response.text
     assert ".meta-pill" in style_response.text
     assert ".detail-box--code.is-copyable" in style_response.text
+    assert "/widget" in manifest_response.text
+    assert "Desktop widget" in manifest_response.text
+    assert "tempmail.sessionToken" in widget_script_response.text
+    assert 'api("/mailboxes")' in widget_script_response.text
+    assert 'api("/inbox")' in widget_script_response.text
+    assert "data-copy-code" in widget_script_response.text
+    assert "Desk Mail" in widget_response.text
+    assert "Latest codes" in widget_response.text
+    assert ".desk-widget" in widget_style_response.text
+    assert ".code-card" in widget_style_response.text
 
     assert config_response.status_code == 200
     payload = config_response.json()

@@ -34,6 +34,11 @@ def create_app(telegram_client=None) -> FastAPI:
         index_path = static_dir / "index.html"
         return HTMLResponse(index_path.read_text(encoding="utf-8"))
 
+    @app.get("/widget", response_class=HTMLResponse, include_in_schema=False)
+    def desktop_widget() -> HTMLResponse:
+        widget_path = static_dir / "widget.html"
+        return HTMLResponse(widget_path.read_text(encoding="utf-8"))
+
     @app.get("/manifest.webmanifest", include_in_schema=False)
     def web_manifest() -> FileResponse:
         return FileResponse(static_dir / "manifest.webmanifest", media_type="application/manifest+json")
