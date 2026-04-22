@@ -1,3 +1,11 @@
+const widgetParams = new URLSearchParams(window.location.search);
+const isNativeShell = widgetParams.get("native") === "1" || navigator.userAgent.includes("SamGPTDesktopWidget");
+
+if (isNativeShell) {
+  document.documentElement.classList.add("is-native-shell");
+  document.body.classList.add("is-native-shell");
+}
+
 const widgetState = {
   config: null,
   sessionToken: localStorage.getItem("tempmail.sessionToken") || "",

@@ -160,6 +160,10 @@ h2 {
   transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
 }
 
+.is-native-shell .full-link {
+  display: none;
+}
+
 .full-link {
   padding: 9px 12px;
   font-size: 0.82rem;
