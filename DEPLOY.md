@@ -39,8 +39,10 @@ GROQ_API_KEYS=key1,key2,key3
 
 ### Current Runtime Surface
 
-The app now exposes the main tempmail API needed for the MVP:
+The app now serves the browser UI and the main tempmail API needed for the MVP:
 
+- `GET /`
+- `GET /client-config`
 - `POST /mailboxes`
 - `GET /mailboxes`
 - `GET /inbox`
@@ -50,6 +52,10 @@ The app now exposes the main tempmail API needed for the MVP:
 - `GET /notifications/latest`
 - `POST /ingest/messages`
 - `GET /health`
+
+`/client-config` intentionally exposes only public browser configuration, including the
+Turnstile site key. The Turnstile secret key and ingest webhook secret must stay in
+Render environment variables only.
 
 ### Cloudflare Ingest Note
 
@@ -77,6 +83,8 @@ npx wrangler deploy
 ```
 
 Do not bind the Email Routing catch-all until `APP_INGEST_URL` points to the real Render URL.
+If the UI is served from a Render hostname, add that hostname to the Turnstile widget domains
+alongside the production mail domain.
 
 ## Legacy Standalone Path
 

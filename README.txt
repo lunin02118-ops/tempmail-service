@@ -1,39 +1,35 @@
-Standalone mail -> Telegram application.
+Standalone tempmail application.
 
 Purpose:
-- receive emails from Gmail API;
-- detect which alias the email was sent to;
-- map alias to Telegram chat;
-- deliver the email into Telegram;
-- remain fully independent from Hermes runtime.
+- create disposable mailboxes through a browser UI;
+- receive inbound mail through Cloudflare Email Routing and an Email Worker;
+- persist mailboxes and messages in Neon Postgres;
+- extract OTP codes, action links, and summaries with deterministic parsing plus Groq;
+- keep the older Gmail/Telegram path available as legacy code.
 
 Current status:
-- isolated Gmail OAuth is already configured separately in this directory;
-- standalone Python app scaffold is implemented;
-- SQLite schema bootstrap is implemented;
-- alias generation and alias routing logic are implemented;
-- Gmail message normalization/ingestion service is implemented;
-- Telegram client adapter is implemented;
-- worker skeleton is implemented;
+- FastAPI app and browser UI are implemented;
+- Render free web service is the current deployment target;
+- Neon-backed tempmail schema is implemented;
+- Cloudflare Email Worker scaffold is implemented under workers/email-ingest;
+- Turnstile client config is exposed without leaking private secrets;
 - test suite passes.
 
 Files of interest:
 - app/main.py              FastAPI/bootstrap entrypoint
-- app/worker.py            polling worker loop
+- app/static/              browser UI assets
 - app/config.py            env-based config
-- app/db.py                SQLite schema init
+- app/db.py                SQLAlchemy schema init
+- app/api/tempmail.py      tempmail API
 - app/services/gmail_client.py
 - app/services/telegram_client.py
 - app/services/ingestion_service.py
+- app/services/ai_service.py
 - app/repositories/aliases.py
 - app/repositories/inbound_messages.py
 - app/repositories/deliveries.py
+- workers/email-ingest/
 - .env.example
 - ARCHITECTURE.md
+- DEPLOY.md
 - requirements.txt
-
-Next required input from user:
-- Telegram bot token
-- one test chat_id
-
-After that, the next implementation step is live Telegram delivery verification and wiring the worker to real polling in production mode.
