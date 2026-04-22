@@ -11,6 +11,7 @@
   },
   "vars": {
     "APP_INGEST_URL": "https://tempmail-web.onrender.com/ingest/messages",
+    "PUBLIC_MAIL_DOMAINS": "samgpt.me,a.samgpt.me,b.samgpt.me,api.samgpt.me,bot.samgpt.me,cdn.samgpt.me,ci.samgpt.me,corp.samgpt.me,dev.samgpt.me,docs.samgpt.me,git.samgpt.me,img.samgpt.me,lab.samgpt.me,mail.samgpt.me,mx.samgpt.me,noreply.samgpt.me,notify.samgpt.me,ops.samgpt.me,staging.samgpt.me,support.samgpt.me,team.samgpt.me",
     "PUBLIC_MAIL_DOMAIN": "samgpt.me",
     "MAX_RAW_BYTES": "1048576"
   }
