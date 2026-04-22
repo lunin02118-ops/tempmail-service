@@ -5,6 +5,58 @@ from dataclasses import dataclass
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+GENERATED_MAIL_DOMAIN_PREFIXES = (
+    "atlas",
+    "aurora",
+    "beacon",
+    "blaze",
+    "bloom",
+    "breeze",
+    "byte",
+    "cipher",
+    "cloud",
+    "comet",
+    "cosmo",
+    "dash",
+    "delta",
+    "drift",
+    "echo",
+    "ember",
+    "flare",
+    "flux",
+    "forge",
+    "glide",
+    "glow",
+    "grid",
+    "halo",
+    "hyper",
+    "ion",
+    "jet",
+    "lumen",
+    "matrix",
+    "micro",
+    "nano",
+    "neon",
+    "nova",
+    "orbit",
+    "pixel",
+    "pulse",
+    "quantum",
+    "radar",
+    "relay",
+    "ripple",
+    "rocket",
+    "signal",
+    "spark",
+    "swift",
+    "sync",
+    "titan",
+    "vector",
+    "vivid",
+    "vortex",
+    "wave",
+    "zen",
+)
 
 
 def _load_local_env_file() -> None:
@@ -79,17 +131,26 @@ def _normalize_domain_values(values: tuple[str, ...] | list[str]) -> tuple[str, 
     return tuple(normalized)
 
 
-def _resolve_public_mail_domains() -> tuple[str, ...]:
-    csv_values = _normalize_domain_values(list(_split_csv_env("PUBLIC_MAIL_DOMAINS")))
-    if csv_values:
-        return csv_values
+def _generate_mail_domain_variants(base_domain: str) -> tuple[str, ...]:
+    clean = base_domain.strip().lower()
+    if not clean or "." not in clean:
+        return ()
+    return tuple(f"{prefix}.{clean}" for prefix in GENERATED_MAIL_DOMAIN_PREFIXES)
 
-    return _normalize_domain_values(
-        [
+
+def _resolve_public_mail_domains() -> tuple[str, ...]:
+    explicit_domains = _normalize_domain_values(
+        list(_split_csv_env("PUBLIC_MAIL_DOMAINS"))
+        or [
             os.getenv("PUBLIC_MAIL_DOMAIN", ""),
             os.getenv("DEFAULT_FROM_ALIAS_DOMAIN", ""),
         ]
     )
+    if not explicit_domains:
+        return ()
+
+    generated_domains = _generate_mail_domain_variants(explicit_domains[0])
+    return _normalize_domain_values([*explicit_domains, *generated_domains])
 
 
 def _resolve_groq_api_keys() -> tuple[str, ...]:

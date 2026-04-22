@@ -47,3 +47,17 @@ def test_settings_collects_groq_keys_from_numbered_env_vars(tmp_path, monkeypatc
     settings = AppSettings.from_env()
 
     assert settings.groq_api_keys == ("groq-key-1", "groq-key-2")
+
+
+def test_settings_expand_public_mail_domains_with_generated_variants(tmp_path, monkeypatch):
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'app.db'}")
+    monkeypatch.setenv("PUBLIC_MAIL_DOMAIN", "samgpt.me")
+    monkeypatch.delenv("PUBLIC_MAIL_DOMAINS", raising=False)
+
+    settings = AppSettings.from_env()
+
+    assert settings.public_mail_domains[0] == "samgpt.me"
+    assert len(settings.public_mail_domains) == 51
+    assert "atlas.samgpt.me" in settings.public_mail_domains
+    assert "zen.samgpt.me" in settings.public_mail_domains

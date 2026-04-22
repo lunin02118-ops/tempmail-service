@@ -32,6 +32,58 @@ const DEFAULT_MAX_RAW_BYTES = 1024 * 1024;
 const HEADER_BODY_SPLIT_RE = /\r?\n\r?\n/;
 const TEXT_PART_RE = /Content-Type:\s*text\/plain(?:;[^\r\n]*)?[\s\S]*?(?=\r?\n--[^\r\n]+|$)/i;
 const HTML_PART_RE = /Content-Type:\s*text\/html(?:;[^\r\n]*)?[\s\S]*?(?=\r?\n--[^\r\n]+|$)/i;
+const GENERATED_DOMAIN_PREFIXES = [
+  "atlas",
+  "aurora",
+  "beacon",
+  "blaze",
+  "bloom",
+  "breeze",
+  "byte",
+  "cipher",
+  "cloud",
+  "comet",
+  "cosmo",
+  "dash",
+  "delta",
+  "drift",
+  "echo",
+  "ember",
+  "flare",
+  "flux",
+  "forge",
+  "glide",
+  "glow",
+  "grid",
+  "halo",
+  "hyper",
+  "ion",
+  "jet",
+  "lumen",
+  "matrix",
+  "micro",
+  "nano",
+  "neon",
+  "nova",
+  "orbit",
+  "pixel",
+  "pulse",
+  "quantum",
+  "radar",
+  "relay",
+  "ripple",
+  "rocket",
+  "signal",
+  "spark",
+  "swift",
+  "sync",
+  "titan",
+  "vector",
+  "vivid",
+  "vortex",
+  "wave",
+  "zen",
+] as const;
 
 function normalizeAddress(value: string | null | undefined): string | null {
   if (!value) {
@@ -41,17 +93,27 @@ function normalizeAddress(value: string | null | undefined): string | null {
   return match ? match[0].toLowerCase() : null;
 }
 
+function normalizeDomains(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean))];
+}
+
+function generateDomainVariants(baseDomain: string | undefined): string[] {
+  const clean = baseDomain?.trim().toLowerCase();
+  if (!clean || !clean.includes(".")) {
+    return [];
+  }
+
+  return GENERATED_DOMAIN_PREFIXES.map((prefix) => `${prefix}.${clean}`);
+}
+
 function parseAllowedDomains(env: Env): string[] {
-  const csvValues = (env.PUBLIC_MAIL_DOMAINS ?? "")
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean);
+  const csvValues = normalizeDomains((env.PUBLIC_MAIL_DOMAINS ?? "").split(","));
   if (csvValues.length) {
-    return [...new Set(csvValues)];
+    return normalizeDomains([...csvValues, ...generateDomainVariants(csvValues[0])]);
   }
 
   const singleDomain = env.PUBLIC_MAIL_DOMAIN?.trim().toLowerCase();
-  return singleDomain ? [singleDomain] : [];
+  return singleDomain ? normalizeDomains([singleDomain, ...generateDomainVariants(singleDomain)]) : [];
 }
 
 function getHeader(headers: Headers, name: string): string | null {
