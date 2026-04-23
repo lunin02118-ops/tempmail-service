@@ -25,7 +25,7 @@ from app.schemas.tempmail import (
 from app.services.ai_service import MessageAnalysisService
 from app.services.mailbox_service import MailboxService
 from app.services.session_service import SESSION_COOKIE_NAME, generate_session_token, hash_session_token
-from app.services.text_encoding import repair_mojibake
+from app.services.text_encoding import normalize_email_content, repair_mojibake
 
 
 router = APIRouter(tags=["tempmail"])
@@ -136,8 +136,8 @@ def _serialize_message_detail(message: dict[str, object]) -> MessageDetailRespon
         source_provider=str(message["source_provider"]),
         provider_message_id=_clean_optional_text(message.get("provider_message_id")),
         internet_message_id=_clean_optional_text(message.get("internet_message_id")),
-        body_text=_clean_optional_text(message.get("body_text")),
-        body_html=_clean_optional_text(message.get("body_html")),
+        body_text=normalize_email_content(_clean_optional_text(message.get("body_text"))),
+        body_html=normalize_email_content(_clean_optional_text(message.get("body_html"))),
         raw_payload_json=str(message["raw_payload_json"]) if message.get("raw_payload_json") is not None else None,
         analysis=_serialize_analysis(message),
     )
@@ -399,8 +399,8 @@ async def ingest_message(
         to_address=request.to_address,
         subject=repair_mojibake(request.subject),
         received_at=request.received_at,
-        body_text=repair_mojibake(request.body_text),
-        body_html=repair_mojibake(request.body_html),
+        body_text=normalize_email_content(request.body_text),
+        body_html=normalize_email_content(request.body_html),
         raw_payload_json=json.dumps(request.raw_payload) if request.raw_payload is not None else None,
         has_attachments=request.has_attachments,
     )

@@ -1,4 +1,5 @@
 import json
+import quopri
 
 from fastapi.testclient import TestClient
 
@@ -25,6 +26,10 @@ def setup_tempmail_env(tmp_path, monkeypatch):
 
 def _as_latin1_mojibake(value: str) -> str:
     return value.encode("utf-8").decode("latin1")
+
+
+def _as_quoted_printable(value: str) -> str:
+    return quopri.encodestring(value.encode("utf-8")).decode("ascii")
 
 
 def test_create_mailbox_sets_session_and_lists_mailboxes(tmp_path, monkeypatch):
@@ -324,6 +329,81 @@ def test_ingest_normalizes_utf8_latin1_mojibake_before_analysis(tmp_path, monkey
 
     assert ingest_response.status_code == 200
     assert ingest_response.json()["notification"]["otp_code"] == "123456"
+
+    message_id = ingest_response.json()["message_id"]
+    detail_response = client.get(f"/messages/{message_id}")
+
+    assert detail_response.status_code == 200
+    detail_payload = detail_response.json()
+    assert detail_payload["body_text"] == body_text
+    assert detail_payload["body_html"] == body_html
+
+
+def test_message_detail_decodes_stored_quoted_printable_html(tmp_path, monkeypatch):
+    setup_tempmail_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("ARCHIVE_ADMIN_TOKEN", "archive-secret")
+    client = TestClient(create_app())
+
+    mailbox = client.post("/mailboxes", json={"requested_local_part": "quotedhtml"}).json()["mailbox"]
+    settings = AppSettings.from_env()
+    message_repo = MessageRepository(settings)
+    body_html = (
+        "<html><head><title>Ваш код ChatGPT 379338</title>"
+        '<meta name="viewport" content="width=device-width"></head>'
+        "<body><p>Код: 379338</p></body></html>"
+    )
+    message_id = message_repo.create_ingested_message(
+        mailbox_id=mailbox["id"],
+        source_provider="legacy",
+        provider_message_id="legacy-quoted-printable",
+        internet_message_id=None,
+        from_address="billing@example.com",
+        to_address=mailbox["address"],
+        subject="Ваш код ChatGPT 379338",
+        received_at=None,
+        body_text=None,
+        body_html=_as_quoted_printable(body_html),
+        raw_payload_json=None,
+    )
+
+    detail_response = client.get(f"/messages/{message_id}")
+    admin_detail_response = client.get(
+        f"/admin/archive/messages/{message_id}",
+        headers={"X-Archive-Admin-Token": "archive-secret"},
+    )
+
+    assert detail_response.status_code == 200
+    assert admin_detail_response.status_code == 200
+    assert detail_response.json()["body_html"] == body_html
+    assert admin_detail_response.json()["body_html"] == body_html
+
+
+def test_ingest_normalizes_quoted_printable_html_before_analysis(tmp_path, monkeypatch):
+    setup_tempmail_env(tmp_path, monkeypatch)
+    client = TestClient(create_app())
+
+    mailbox = client.post("/mailboxes", json={}).json()["mailbox"]
+    body_text = "Ваш код ChatGPT 379338"
+    body_html = (
+        "<html><head><title>Ваш код ChatGPT 379338</title></head>"
+        "<body><p>Код: 379338</p></body></html>"
+    )
+
+    ingest_response = client.post(
+        "/ingest/messages",
+        headers={"X-Ingest-Webhook-Secret": "test-ingest-secret"},
+        json={
+            "to_address": mailbox["address"],
+            "from_address": "OpenAI <billing@example.com>",
+            "subject": "Ваш код ChatGPT 379338",
+            "provider_message_id": "provider-quoted-printable",
+            "body_text": _as_quoted_printable(body_text),
+            "body_html": _as_quoted_printable(body_html),
+        },
+    )
+
+    assert ingest_response.status_code == 200
+    assert ingest_response.json()["notification"]["otp_code"] == "379338"
 
     message_id = ingest_response.json()["message_id"]
     detail_response = client.get(f"/messages/{message_id}")
