@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
+from app.api.admin_archive import router as admin_archive_router
 from app.api.aliases import router as aliases_router
 from app.api.tempmail import router as tempmail_router
 from app.api.telegram import router as telegram_router, set_telegram_client_dependency
@@ -25,6 +26,7 @@ def create_app(telegram_client=None) -> FastAPI:
     app = FastAPI(title="samgpt-tempmail")
     static_dir = settings.project_root / "app" / "static"
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    app.include_router(admin_archive_router)
     app.include_router(aliases_router)
     app.include_router(tempmail_router)
     app.include_router(telegram_router)
@@ -38,6 +40,11 @@ def create_app(telegram_client=None) -> FastAPI:
     def desktop_widget() -> HTMLResponse:
         widget_path = static_dir / "widget.html"
         return HTMLResponse(widget_path.read_text(encoding="utf-8"))
+
+    @app.get("/admin/archive", response_class=HTMLResponse, include_in_schema=False)
+    def admin_archive() -> HTMLResponse:
+        archive_path = static_dir / "archive.html"
+        return HTMLResponse(archive_path.read_text(encoding="utf-8"))
 
     @app.get("/manifest.webmanifest", include_in_schema=False)
     def web_manifest() -> FileResponse:

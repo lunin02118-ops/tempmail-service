@@ -23,6 +23,8 @@ services:
         sync: false
       - key: INGEST_WEBHOOK_SECRET
         sync: false
+      - key: ARCHIVE_ADMIN_TOKEN
+        sync: false
       - key: TURNSTILE_SITE_KEY
         sync: false
       - key: TURNSTILE_SECRET_KEY

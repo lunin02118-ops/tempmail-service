@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>SamGPT Mail Archive</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Fraunces:opsz,wght@9..144,650;9..144,850&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/archive.css" />
+    <script src="/static/archive.js" defer></script>
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+    <main class="archive-shell">
+      <section class="archive-hero">
+        <div>
+          <p class="eyebrow">operator archive</p>
+          <h1>All received mail.</h1>
+          <p class="lede">Search every stored email across all generated mailboxes and inspect the original text, HTML, and raw payload.</p>
+        </div>
+        <a class="home-link" href="/">Back to app</a>
+      </section>
+
+      <section class="archive-grid">
+        <aside class="archive-panel archive-sidebar">
+          <form id="archive-auth" class="archive-auth">
+            <label>
+              Admin token
+              <input id="archive-token" name="token" type="password" autocomplete="off" placeholder="ARCHIVE_ADMIN_TOKEN" />
+            </label>
+            <button type="submit">Unlock archive</button>
+          </form>
+
+          <form id="archive-search" class="archive-search">
+            <label>
+              Search
+              <input id="archive-query" name="q" autocomplete="off" placeholder="subject, sender, address, code" />
+            </label>
+            <button type="submit">Search</button>
+          </form>
+
+          <div class="archive-toolbar">
+            <span id="archive-status" role="status">Enter the admin token to load mail.</span>
+            <button id="archive-refresh" type="button">Refresh</button>
+          </div>
+
+          <div id="archive-list" class="archive-list empty">
+            <p>No archive loaded yet.</p>
+          </div>
+        </aside>
+
+        <section class="archive-panel archive-reader">
+          <article id="archive-detail" class="archive-detail empty">
+            <span>No email selected</span>
+            <p>Open any archived message to read the full source without relying on AI extraction.</p>
+          </article>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import and_, insert, join, outerjoin, select, update
+from sqlalchemy import and_, insert, join, or_, outerjoin, select, update
 
 from app.config import AppSettings
 from app.db import ai_extractions_table, get_engine, mailboxes_table, messages_table
@@ -120,6 +120,44 @@ class MessageRepository:
             rows = conn.execute(query).mappings().all()
             return [dict(row) for row in rows]
 
+    def list_all_for_admin(self, *, limit: int = 250, offset: int = 0, search: str | None = None) -> list[dict[str, object]]:
+        mailbox_join = join(messages_table, mailboxes_table, messages_table.c.mailbox_id == mailboxes_table.c.id)
+        extraction_join = outerjoin(mailbox_join, ai_extractions_table, ai_extractions_table.c.message_id == messages_table.c.id)
+        query = (
+            select(
+                messages_table,
+                mailboxes_table.c.address.label("mailbox_address"),
+                mailboxes_table.c.local_part.label("mailbox_local_part"),
+                mailboxes_table.c.domain.label("mailbox_domain"),
+                ai_extractions_table.c.summary.label("ai_summary"),
+                ai_extractions_table.c.otp_code.label("otp_code"),
+                ai_extractions_table.c.action_required.label("action_required"),
+                ai_extractions_table.c.sender_brand.label("sender_brand"),
+                ai_extractions_table.c.status.label("ai_status"),
+            )
+            .select_from(extraction_join)
+            .order_by(messages_table.c.received_at.desc(), messages_table.c.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+
+        if search:
+            needle = f"%{search.strip()}%"
+            query = query.where(
+                or_(
+                    messages_table.c.subject.ilike(needle),
+                    messages_table.c.from_address.ilike(needle),
+                    messages_table.c.to_address.ilike(needle),
+                    mailboxes_table.c.address.ilike(needle),
+                    ai_extractions_table.c.otp_code.ilike(needle),
+                    ai_extractions_table.c.sender_brand.ilike(needle),
+                )
+            )
+
+        with self._engine.connect() as conn:
+            rows = conn.execute(query).mappings().all()
+            return [dict(row) for row in rows]
+
     def _build_message_detail_query(self, message_id: int, session_token_hash: str):
         mailbox_join = join(messages_table, mailboxes_table, messages_table.c.mailbox_id == mailboxes_table.c.id)
         extraction_join = outerjoin(mailbox_join, ai_extractions_table, ai_extractions_table.c.message_id == messages_table.c.id)
@@ -167,6 +205,35 @@ class MessageRepository:
                     .values(is_unread=0)
                 )
             return dict(row)
+
+    def get_for_admin(self, message_id: int) -> dict[str, object] | None:
+        mailbox_join = join(messages_table, mailboxes_table, messages_table.c.mailbox_id == mailboxes_table.c.id)
+        extraction_join = outerjoin(mailbox_join, ai_extractions_table, ai_extractions_table.c.message_id == messages_table.c.id)
+        query = (
+            select(
+                messages_table,
+                mailboxes_table.c.address.label("mailbox_address"),
+                mailboxes_table.c.local_part.label("mailbox_local_part"),
+                mailboxes_table.c.domain.label("mailbox_domain"),
+                ai_extractions_table.c.provider.label("ai_provider"),
+                ai_extractions_table.c.model.label("ai_model"),
+                ai_extractions_table.c.summary.label("ai_summary"),
+                ai_extractions_table.c.message_type.label("message_type"),
+                ai_extractions_table.c.otp_code.label("otp_code"),
+                ai_extractions_table.c.action_required.label("action_required"),
+                ai_extractions_table.c.action_links_json.label("action_links_json"),
+                ai_extractions_table.c.sender_brand.label("sender_brand"),
+                ai_extractions_table.c.confidence.label("ai_confidence"),
+                ai_extractions_table.c.status.label("ai_status"),
+                ai_extractions_table.c.error_text.label("ai_error_text"),
+            )
+            .select_from(extraction_join)
+            .where(messages_table.c.id == message_id)
+            .limit(1)
+        )
+        with self._engine.connect() as conn:
+            row = conn.execute(query).mappings().first()
+            return None if row is None else dict(row)
 
     def build_notification_payload(self, message_id: int, session_token_hash: str) -> dict[str, object] | None:
         message = self.get_for_session(message_id, session_token_hash, mark_as_read=False)

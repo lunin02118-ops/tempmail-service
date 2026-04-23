@@ -17,6 +17,7 @@ def setup_tempmail_env(tmp_path, monkeypatch):
     monkeypatch.delenv("TURNSTILE_SECRET_KEY", raising=False)
     monkeypatch.delenv("TURNSTILE_SITE_KEY", raising=False)
     monkeypatch.delenv("GROQ_API_KEYS", raising=False)
+    monkeypatch.delenv("ARCHIVE_ADMIN_TOKEN", raising=False)
     for index in range(1, 10):
         monkeypatch.delenv(f"GROQ_API_KEY_{index}", raising=False)
 
@@ -49,30 +50,42 @@ def test_web_app_and_client_config_do_not_expose_private_turnstile_secret(tmp_pa
 
     index_response = client.get("/")
     widget_response = client.get("/widget")
+    archive_response = client.get("/admin/archive")
     config_response = client.get("/client-config")
     script_response = client.get("/static/app.js")
     style_response = client.get("/static/app.css")
     widget_script_response = client.get("/static/widget.js")
     widget_style_response = client.get("/static/widget.css")
+    archive_script_response = client.get("/static/archive.js")
+    archive_style_response = client.get("/static/archive.css")
     manifest_response = client.get("/manifest.webmanifest")
     worker_response = client.get("/service-worker.js")
 
     assert index_response.status_code == 200
     assert widget_response.status_code == 200
+    assert archive_response.status_code == 200
     assert "SamGPT Temp Mail" in index_response.text
     assert "SamGPT Desk Widget" in widget_response.text
+    assert "SamGPT Mail Archive" in archive_response.text
     assert "private-secret-key" not in index_response.text
     assert "private-secret-key" not in widget_response.text
+    assert "private-secret-key" not in archive_response.text
     assert script_response.status_code == 200
     assert style_response.status_code == 200
     assert widget_script_response.status_code == 200
     assert widget_style_response.status_code == 200
+    assert archive_script_response.status_code == 200
+    assert archive_style_response.status_code == 200
     assert manifest_response.status_code == 200
     assert worker_response.status_code == 200
     assert "private-secret-key" not in script_response.text
     assert "private-secret-key" not in style_response.text
     assert "private-secret-key" not in widget_script_response.text
     assert "private-secret-key" not in widget_style_response.text
+    assert "private-secret-key" not in archive_script_response.text
+    assert "private-secret-key" not in archive_style_response.text
+    assert "X-Archive-Admin-Token" in archive_script_response.text
+    assert "All received mail" in archive_response.text
     assert "data-copy-code" in script_response.text
     assert "OTP ${escapeHtml(message.otp_code)}" not in script_response.text
     assert "<small>Code</small>" in script_response.text
@@ -163,6 +176,96 @@ def test_ingested_message_appears_in_unified_and_mailbox_inbox(tmp_path, monkeyp
     assert inbox_payload[0]["is_unread"] is True
     assert mailbox_history_payload[0]["id"] == inbox_payload[0]["id"]
     assert latest_notification_payload["otp_code"] == "654321"
+
+
+def test_admin_archive_is_token_protected_and_lists_all_sessions(tmp_path, monkeypatch):
+    setup_tempmail_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("ARCHIVE_ADMIN_TOKEN", "archive-secret")
+    first_client = TestClient(create_app())
+    second_client = TestClient(create_app())
+    admin_client = TestClient(create_app())
+
+    first_mailbox = first_client.post(
+        "/mailboxes",
+        json={"requested_local_part": "firstbox"},
+    ).json()["mailbox"]
+    second_mailbox = second_client.post(
+        "/mailboxes",
+        json={"requested_local_part": "secondbox"},
+    ).json()["mailbox"]
+
+    first_ingest = admin_client.post(
+        "/ingest/messages",
+        headers={"X-Ingest-Webhook-Secret": "test-ingest-secret"},
+        json={
+            "to_address": first_mailbox["address"],
+            "from_address": "GitHub <noreply@github.com>",
+            "subject": "GitHub code",
+            "provider_message_id": "admin-archive-1",
+            "body_text": "Your GitHub verification code is 111222.",
+        },
+    )
+    second_ingest = admin_client.post(
+        "/ingest/messages",
+        headers={"X-Ingest-Webhook-Secret": "test-ingest-secret"},
+        json={
+            "to_address": second_mailbox["address"],
+            "from_address": "OpenAI <noreply@openai.com>",
+            "subject": "OpenAI code",
+            "provider_message_id": "admin-archive-2",
+            "body_text": "Your OpenAI verification code is 333444.",
+            "raw_payload": {"source": "test"},
+        },
+    )
+
+    assert first_ingest.status_code == 200
+    assert second_ingest.status_code == 200
+
+    missing_token_response = admin_client.get("/admin/archive/messages")
+    wrong_token_response = admin_client.get(
+        "/admin/archive/messages",
+        headers={"X-Archive-Admin-Token": "wrong"},
+    )
+    archive_response = admin_client.get(
+        "/admin/archive/messages",
+        headers={"X-Archive-Admin-Token": "archive-secret"},
+    )
+    search_response = admin_client.get(
+        "/admin/archive/messages?q=github",
+        headers={"Authorization": "Bearer archive-secret"},
+    )
+
+    assert missing_token_response.status_code == 401
+    assert wrong_token_response.status_code == 401
+    assert archive_response.status_code == 200
+    archive_payload = archive_response.json()
+    assert len(archive_payload) == 2
+    assert {message["mailbox_address"] for message in archive_payload} == {
+        first_mailbox["address"],
+        second_mailbox["address"],
+    }
+    assert search_response.status_code == 200
+    assert [message["mailbox_address"] for message in search_response.json()] == [first_mailbox["address"]]
+
+    detail_response = admin_client.get(
+        f"/admin/archive/messages/{second_ingest.json()['message_id']}",
+        headers={"X-Archive-Admin-Token": "archive-secret"},
+    )
+
+    assert detail_response.status_code == 200
+    detail_payload = detail_response.json()
+    assert detail_payload["mailbox_address"] == second_mailbox["address"]
+    assert detail_payload["body_text"] == "Your OpenAI verification code is 333444."
+    assert detail_payload["raw_payload_json"] == '{"source": "test"}'
+
+
+def test_admin_archive_is_not_available_without_configured_token(tmp_path, monkeypatch):
+    setup_tempmail_env(tmp_path, monkeypatch)
+    client = TestClient(create_app())
+
+    response = client.get("/admin/archive/messages", headers={"X-Archive-Admin-Token": "anything"})
+
+    assert response.status_code == 404
 
 
 def test_message_detail_marks_message_as_read_and_analysis_returns_result(tmp_path, monkeypatch):
