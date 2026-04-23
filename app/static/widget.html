@@ -32,9 +32,6 @@
               <h1>DeskMail</h1>
             </div>
           </div>
-          <div class="window-actions">
-            <a class="full-link" href="/" target="_blank" rel="noreferrer">Open</a>
-          </div>
           <div class="window-controls" aria-label="Window controls">
             <button
               id="native-minimize"
@@ -59,44 +56,7 @@
           </div>
         </header>
 
-        <section class="overview-panel" aria-label="Mailbox overview and primary actions">
-          <div class="snapshot-head">
-            <div>
-              <p class="eyebrow">live inbox</p>
-              <h2>OTP console</h2>
-            </div>
-            <span id="sync-state" class="sync-state">idle</span>
-          </div>
-
-          <div class="snapshot-grid">
-            <button id="address-card" class="address-card is-empty" type="button" disabled>
-              <small>Current address</small>
-              <strong>No address yet</strong>
-              <span>Generate one to start listening</span>
-            </button>
-
-            <button id="latest-code-card" class="signal-card is-empty" type="button" disabled>
-              <small>Last OTP</small>
-              <strong id="latest-code-value">Waiting</strong>
-              <span id="latest-code-meta">No code received yet</span>
-            </button>
-          </div>
-
-          <div class="telemetry-row" aria-label="Inbox status">
-            <span class="telemetry-pill">
-              <small>mail</small>
-              <strong id="mail-count">0</strong>
-            </span>
-            <span class="telemetry-pill">
-              <small>codes</small>
-              <strong id="code-count">0</strong>
-            </span>
-            <span class="telemetry-pill">
-              <small>domain</small>
-              <strong id="domain-summary">...</strong>
-            </span>
-          </div>
-
+        <section class="widget-core" aria-label="Temporary mailbox and latest code">
           <form id="widget-form" class="generator">
             <label class="domain-field">
               <span>Domain</span>
@@ -130,52 +90,23 @@
             <button id="generate" type="submit">New inbox</button>
           </form>
 
+          <button id="address-card" class="address-card is-empty" type="button" disabled>
+            <small>Generated mail</small>
+            <strong>No address yet</strong>
+            <span>Choose domain and generate</span>
+          </button>
+
+          <button id="latest-code-card" class="signal-card is-empty" type="button" disabled>
+            <small>Last OTP</small>
+            <strong id="latest-code-value">Waiting</strong>
+            <span id="latest-code-meta">No code received yet</span>
+          </button>
+
           <div id="turnstile-slot" class="turnstile-slot" aria-live="polite">
             <span>Human gate check...</span>
           </div>
 
-          <div class="status-row">
-            <span id="status" class="status" role="status">Ready for a new mailbox.</span>
-            <button id="refresh" class="refresh-button" type="button">Refresh</button>
-          </div>
-        </section>
-
-        <section class="codes-panel" aria-label="Latest verification codes">
-          <div class="codes-header">
-            <div>
-              <p class="eyebrow">live feed</p>
-              <h2>Latest codes</h2>
-            </div>
-            <span id="poll-indicator" class="poll-indicator">idle</span>
-          </div>
-          <div id="code-list" class="code-list empty">
-            <p>Codes will appear here automatically.</p>
-          </div>
-        </section>
-
-        <section class="archive-panel" aria-label="Mail archive">
-          <div class="codes-header">
-            <div>
-              <p class="eyebrow">mail archive</p>
-              <h2>Archive</h2>
-            </div>
-            <span id="archive-count" class="archive-count">0</span>
-          </div>
-          <div id="archive-list" class="archive-list empty">
-            <p>Every received email for this session will appear here.</p>
-          </div>
-        </section>
-
-        <section class="reader-panel" aria-label="Original email viewer">
-          <div class="codes-header">
-            <div>
-              <p class="eyebrow">manual review</p>
-              <h2>Original source</h2>
-            </div>
-          </div>
-          <article id="message-reader" class="message-reader empty">
-            <p>Pick a message from the archive to inspect the original text, HTML, and raw payload.</p>
-          </article>
+          <span id="status" class="status" role="status">Ready.</span>
         </section>
       </section>
     </main>

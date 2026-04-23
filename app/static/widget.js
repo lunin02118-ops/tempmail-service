@@ -14,9 +14,6 @@ const widgetState = {
   selectedDomain: "",
   mailboxes: [],
   messages: [],
-  selectedMessageId: null,
-  selectedMessage: null,
-  selectedSourceTab: "text",
   lastSeenMessageId: Number(localStorage.getItem("tempmail.widget.lastSeenMessageId") || "0"),
   pollTimer: null,
 };
@@ -36,18 +33,7 @@ const widgetEl = {
   latestCodeCard: document.querySelector("#latest-code-card"),
   latestCodeValue: document.querySelector("#latest-code-value"),
   latestCodeMeta: document.querySelector("#latest-code-meta"),
-  mailCount: document.querySelector("#mail-count"),
-  codeCount: document.querySelector("#code-count"),
-  domainSummary: document.querySelector("#domain-summary"),
-  syncState: document.querySelector("#sync-state"),
   status: document.querySelector("#status"),
-  refresh: document.querySelector("#refresh"),
-  codeList: document.querySelector("#code-list"),
-  archiveCount: document.querySelector("#archive-count"),
-  archiveList: document.querySelector("#archive-list"),
-  messageReader: document.querySelector("#message-reader"),
-  pollIndicator: document.querySelector("#poll-indicator"),
-  fullLink: document.querySelector(".full-link"),
   nativeMinimize: document.querySelector("#native-minimize"),
   nativeClose: document.querySelector("#native-close"),
 };
@@ -103,100 +89,6 @@ function senderLabel(message) {
   return message.sender_brand || message.from_address || "unknown sender";
 }
 
-function updateFullLink() {
-  if (!widgetEl.fullLink) {
-    return;
-  }
-
-  const hashParams = new URLSearchParams();
-  if (widgetState.sessionToken) {
-    hashParams.set("session_token", widgetState.sessionToken);
-  }
-  if (widgetState.selectedMessageId) {
-    hashParams.set("message_id", String(widgetState.selectedMessageId));
-  }
-
-  const hash = hashParams.toString();
-  widgetEl.fullLink.href = hash ? `/#${hash}` : "/";
-}
-
-function formatRawPayload(rawValue) {
-  const raw = String(rawValue || "").trim();
-  if (!raw) {
-    return "";
-  }
-  try {
-    return JSON.stringify(JSON.parse(raw), null, 2);
-  } catch {
-    return raw;
-  }
-}
-
-function getSourceTabs(message) {
-  const tabs = [];
-  if (String(message?.body_text || "").trim()) {
-    tabs.push("text");
-  }
-  if (String(message?.body_html || "").trim()) {
-    tabs.push("html");
-  }
-  if (String(message?.raw_payload_json || "").trim()) {
-    tabs.push("raw");
-  }
-  return tabs.length ? tabs : ["text"];
-}
-
-function sourceTabLabel(tab) {
-  if (tab === "html") {
-    return "HTML";
-  }
-  if (tab === "raw") {
-    return "Raw";
-  }
-  return "Text";
-}
-
-function resolveSourceTab(message) {
-  const tabs = getSourceTabs(message);
-  return tabs.includes(widgetState.selectedSourceTab) ? widgetState.selectedSourceTab : tabs[0];
-}
-
-function mountHtmlPreview(root, message) {
-  const frame = root.querySelector("[data-html-preview]");
-  if (!frame) {
-    return;
-  }
-
-  const html = String(message?.body_html || "").trim();
-  if (!html) {
-    frame.srcdoc = "<body></body>";
-    return;
-  }
-
-  frame.srcdoc = `
-    <!doctype html>
-    <html lang="en">
-      <head>
-        <meta charset="utf-8" />
-        <style>
-          body {
-            margin: 0;
-            padding: 14px;
-            color: #111a2a;
-            font: 14px/1.45 "Segoe UI", Arial, sans-serif;
-            background: #fffdf6;
-            overflow-wrap: anywhere;
-          }
-          img, table { max-width: 100%; }
-          pre { white-space: pre-wrap; }
-          a { color: #9d2b18; }
-        </style>
-      </head>
-      <body>${html}</body>
-    </html>
-  `;
-}
-
 async function writeClipboard(value) {
   const text = String(value ?? "");
   if (navigator.clipboard?.writeText) {
@@ -242,7 +134,6 @@ function setSelectedDomain(domain) {
   widgetState.selectedDomain = domain;
   widgetEl.domainValue.value = domain;
   widgetEl.domainCurrent.textContent = domain ? `@${domain}` : "@domain";
-  widgetEl.domainSummary.textContent = domain ? domain.replace(".samgpt.me", "") : "...";
 
   for (const option of widgetEl.domainOptionList.querySelectorAll("[data-domain-value]")) {
     const isActive = option.dataset.domainValue === domain;
@@ -325,7 +216,7 @@ async function api(path, options = {}) {
 
 function renderTurnstile() {
   if (!widgetState.config?.turnstile_enabled) {
-    widgetEl.turnstileSlot.classList.add("is-hidden");
+    hideTurnstile();
     return;
   }
 
@@ -339,6 +230,11 @@ function renderTurnstile() {
 
   if (!window.turnstile) {
     setTimeout(renderTurnstile, 250);
+    return;
+  }
+
+  if (widgetState.turnstileWidgetId !== null) {
+    window.turnstile.reset(widgetState.turnstileWidgetId);
     return;
   }
 
@@ -364,9 +260,14 @@ function renderTurnstile() {
     "unsupported-callback"() {
       widgetState.turnstileToken = "";
       widgetEl.turnstileSlot.dataset.state = "unsupported";
-      setWidgetStatus("Human gate is blocked by the embedded browser. Relaunch after the widget update.", "error");
+      setWidgetStatus("Human gate is blocked by the embedded browser.", "error");
     },
   });
+}
+
+function hideTurnstile() {
+  widgetEl.turnstileSlot.classList.add("is-hidden");
+  widgetEl.turnstileSlot.dataset.state = "idle";
 }
 
 function resetTurnstile() {
@@ -375,6 +276,7 @@ function resetTurnstile() {
   if (window.turnstile && widgetState.turnstileWidgetId !== null) {
     window.turnstile.reset(widgetState.turnstileWidgetId);
   }
+  hideTurnstile();
 }
 
 function latestMailbox() {
@@ -388,9 +290,9 @@ function renderAddress() {
     widgetEl.addressCard.disabled = true;
     widgetEl.addressCard.removeAttribute("data-copy-address");
     widgetEl.addressCard.innerHTML = `
-      <small>Current address</small>
+      <small>Generated mail</small>
       <strong>No address yet</strong>
-      <span>Generate one to start listening</span>
+      <span>Choose domain and generate</span>
     `;
     return;
   }
@@ -399,25 +301,20 @@ function renderAddress() {
   widgetEl.addressCard.disabled = false;
   widgetEl.addressCard.dataset.copyAddress = mailbox.address;
   widgetEl.addressCard.innerHTML = `
-    <small>Current address</small>
+    <small>Generated mail</small>
     <strong>${escapeHtml(mailbox.address)}</strong>
-    <span>Click to copy the active mailbox</span>
+    <span>Click to copy</span>
   `;
 }
 
-function renderSnapshot() {
-  const codedMessages = widgetState.messages.filter((message) => message.otp_code);
-  const latestCode = codedMessages[0] || null;
-
-  widgetEl.mailCount.textContent = String(widgetState.messages.length);
-  widgetEl.codeCount.textContent = String(codedMessages.length);
-
+function renderLatestCode() {
+  const latestCode = widgetState.messages.find((message) => message.otp_code) || null;
   if (!latestCode) {
     widgetEl.latestCodeCard.className = "signal-card is-empty";
     widgetEl.latestCodeCard.disabled = true;
     widgetEl.latestCodeCard.removeAttribute("data-copy-latest-code");
     widgetEl.latestCodeValue.textContent = "Waiting";
-    widgetEl.latestCodeMeta.textContent = widgetState.sessionToken ? "No OTP yet" : "Generate inbox first";
+    widgetEl.latestCodeMeta.textContent = widgetState.sessionToken ? "No OTP yet" : "Generate mail first";
     return;
   }
 
@@ -426,167 +323,6 @@ function renderSnapshot() {
   widgetEl.latestCodeCard.dataset.copyLatestCode = latestCode.otp_code;
   widgetEl.latestCodeValue.textContent = latestCode.otp_code;
   widgetEl.latestCodeMeta.textContent = `${senderLabel(latestCode)} / ${formatTime(latestCode.received_at)}`;
-}
-
-function renderMessageReader(message = widgetState.selectedMessage) {
-  if (!message) {
-    widgetEl.messageReader.className = "message-reader empty";
-    widgetEl.messageReader.innerHTML = "<p>Pick a message from the archive to inspect the original text, HTML, and raw payload.</p>";
-    return;
-  }
-
-  widgetState.selectedMessage = message;
-  const activeTab = resolveSourceTab(message);
-  widgetState.selectedSourceTab = activeTab;
-  const analysis = message.analysis || {};
-  const sourceTabs = getSourceTabs(message)
-    .map(
-      (tab) => `
-        <button
-          class="source-tab${tab === activeTab ? " is-active" : ""}"
-          type="button"
-          role="tab"
-          aria-selected="${tab === activeTab ? "true" : "false"}"
-          data-source-tab="${tab}"
-        >
-          ${sourceTabLabel(tab)}
-        </button>
-      `,
-    )
-    .join("");
-
-  let sourceBody = '<div class="reader-empty">Original content is missing for this message.</div>';
-  if (activeTab === "html" && String(message.body_html || "").trim()) {
-    sourceBody = `
-      <div class="source-preview">
-        <div class="source-preview-frame">
-          <iframe class="source-frame" title="HTML email preview" sandbox data-html-preview></iframe>
-        </div>
-        <pre class="source-pre source-pre--html">${escapeHtml(message.body_html)}</pre>
-      </div>
-    `;
-  } else if (activeTab === "raw" && String(message.raw_payload_json || "").trim()) {
-    sourceBody = `<pre class="source-pre source-pre--raw">${escapeHtml(formatRawPayload(message.raw_payload_json))}</pre>`;
-  } else if (String(message.body_text || "").trim()) {
-    sourceBody = `<pre class="source-pre">${escapeHtml(message.body_text)}</pre>`;
-  }
-
-  widgetEl.messageReader.className = "message-reader";
-  widgetEl.messageReader.innerHTML = `
-    <div class="reader-heading">
-      <small>Subject</small>
-      <strong>${escapeHtml(message.subject || "No subject")}</strong>
-      <span>${escapeHtml(senderLabel(message))} / ${formatTime(message.received_at)}</span>
-    </div>
-    <div class="reader-summary">
-      <small>Analyzer</small>
-      <p>${escapeHtml(analysis.summary || message.ai_summary || "No AI summary yet. Read the original content below.")}</p>
-    </div>
-    <div class="reader-source-head">
-      <small>Original message</small>
-      <div class="source-tabs" role="tablist" aria-label="Original message tabs">
-        ${sourceTabs}
-      </div>
-    </div>
-    ${sourceBody}
-  `;
-  mountHtmlPreview(widgetEl.messageReader, message);
-}
-
-function renderCodes() {
-  const messagesWithCodes = widgetState.messages.filter((message) => message.otp_code).slice(0, 5);
-  if (!messagesWithCodes.length) {
-    widgetEl.codeList.className = "code-list empty";
-    widgetEl.codeList.innerHTML = "<p>Waiting for verification codes. New OTPs appear automatically.</p>";
-    renderSnapshot();
-    if (!widgetState.messages.length) {
-      widgetState.selectedMessageId = null;
-      widgetState.selectedMessage = null;
-      renderMessageReader();
-    }
-    return;
-  }
-
-  widgetEl.codeList.className = "code-list";
-  renderSnapshot();
-  widgetEl.codeList.innerHTML = messagesWithCodes
-    .map((message) => {
-      const isNew = Number(message.id) > widgetState.lastSeenMessageId ? " is-new" : "";
-      const isSelected = Number(message.id) === Number(widgetState.selectedMessageId) ? " is-selected" : "";
-      return `
-        <article class="code-card${isNew}${isSelected}">
-          <button
-            class="code-open"
-            type="button"
-            data-open-message="${message.id}"
-            aria-label="Open original message ${escapeHtml(message.subject || "Verification code")}"
-          >
-            <span class="code-meta">
-              <strong>${escapeHtml(message.subject || "Verification code")}</strong>
-              <small>${escapeHtml(senderLabel(message))} / ${formatTime(message.received_at)}</small>
-            </span>
-            <span class="code-open-hint">Open below</span>
-          </button>
-          <button
-            class="code-copy-button"
-            type="button"
-            data-copy-code="${escapeHtml(message.otp_code)}"
-            aria-label="Copy code ${escapeHtml(message.otp_code)}"
-          >
-            ${escapeHtml(message.otp_code)}
-          </button>
-        </article>
-      `;
-    })
-    .join("");
-}
-
-function renderArchive() {
-  widgetEl.archiveCount.textContent = String(widgetState.messages.length);
-
-  if (!widgetState.messages.length) {
-    widgetEl.archiveList.className = "archive-list empty";
-    widgetEl.archiveList.innerHTML = "<p>Every received email for this session will appear here.</p>";
-    return;
-  }
-
-  widgetEl.archiveList.className = "archive-list";
-  widgetEl.archiveList.innerHTML = widgetState.messages
-    .map((message) => {
-      const isSelected = Number(message.id) === Number(widgetState.selectedMessageId) ? " is-selected" : "";
-      const unread = message.is_unread ? '<span class="archive-unread" aria-label="Unread"></span>' : "";
-      const code = message.otp_code
-        ? `
-          <button
-            class="archive-code"
-            type="button"
-            data-copy-code="${escapeHtml(message.otp_code)}"
-            aria-label="Copy code ${escapeHtml(message.otp_code)}"
-          >
-            ${escapeHtml(message.otp_code)}
-          </button>
-        `
-        : '<span class="archive-tag">no code</span>';
-      return `
-        <article class="archive-card${isSelected}">
-          <button
-            class="archive-open"
-            type="button"
-            data-open-message="${message.id}"
-            aria-label="Open archived email ${escapeHtml(message.subject || "No subject")}"
-          >
-            <span class="archive-title-row">
-              <strong>${escapeHtml(message.subject || "No subject")}</strong>
-              ${unread}
-            </span>
-            <small>${escapeHtml(senderLabel(message))} / ${formatTime(message.received_at)}</small>
-            <span>${escapeHtml(message.mailbox_address || "")}</span>
-          </button>
-          ${code}
-        </article>
-      `;
-    })
-    .join("");
 }
 
 function rememberSeenMessages() {
@@ -599,69 +335,37 @@ async function loadMailboxes() {
   if (!widgetState.sessionToken) {
     widgetState.mailboxes = [];
     renderAddress();
-    updateFullLink();
     return;
   }
   widgetState.mailboxes = await api("/mailboxes");
   renderAddress();
-  updateFullLink();
 }
 
 async function loadInbox({ quiet = false } = {}) {
   if (!widgetState.sessionToken) {
     widgetState.messages = [];
-    renderCodes();
-    renderArchive();
-    widgetEl.pollIndicator.textContent = "idle";
-    widgetEl.syncState.textContent = "idle";
+    renderLatestCode();
     return;
   }
 
-  widgetEl.pollIndicator.textContent = "syncing";
-  widgetEl.syncState.textContent = "syncing";
   const previousSeen = widgetState.lastSeenMessageId;
   widgetState.messages = await api("/inbox");
-  renderCodes();
-  renderArchive();
+  renderLatestCode();
   const newestCode = widgetState.messages.find((message) => message.otp_code && Number(message.id) > previousSeen);
   if (newestCode) {
     document.title = `${newestCode.otp_code} · DeskMail Widget`;
     setWidgetStatus(`New code: ${newestCode.otp_code}`, "success");
   } else if (!quiet) {
-    setWidgetStatus(widgetState.messages.length ? "Inbox synced." : "Listening for incoming mail.");
+    setWidgetStatus(widgetState.messages.length ? "Synced." : "Waiting for code.");
   }
   rememberSeenMessages();
-  widgetEl.pollIndicator.textContent = "live";
-  widgetEl.syncState.textContent = "live";
-}
-
-async function selectMessage(messageId, { quiet = false } = {}) {
-  widgetState.selectedMessageId = messageId;
-  renderCodes();
-  renderArchive();
-  if (!quiet) {
-    setWidgetStatus("Opening original email...");
-  }
-  const message = await api(`/messages/${messageId}`);
-  renderMessageReader(message);
-  updateFullLink();
-  if (!quiet) {
-    setWidgetStatus(`Opened ${message.subject || "message"}.`);
-  }
-}
-
-async function refreshSelectedMessageDetail() {
-  if (!widgetState.selectedMessageId) {
-    return;
-  }
-  const message = await api(`/messages/${widgetState.selectedMessageId}`);
-  renderMessageReader(message);
 }
 
 async function createMailbox(event) {
   event.preventDefault();
   if (widgetState.config?.turnstile_enabled && !widgetState.turnstileToken) {
-    setWidgetStatus("Complete the human gate first.", "error");
+    renderTurnstile();
+    setWidgetStatus("Human check required.", "error");
     return;
   }
 
@@ -678,7 +382,7 @@ async function createMailbox(event) {
   }
 
   widgetEl.generate.disabled = true;
-  setWidgetStatus("Generating mailbox...");
+  setWidgetStatus("Generating...");
   try {
     const payload = await api("/mailboxes", {
       method: "POST",
@@ -686,8 +390,7 @@ async function createMailbox(event) {
     });
     widgetState.sessionToken = payload.session_token;
     localStorage.setItem("tempmail.sessionToken", payload.session_token);
-    updateFullLink();
-    setWidgetStatus(`Generated ${payload.mailbox.address}`, "success");
+    setWidgetStatus("Generated.", "success");
     await loadMailboxes();
     await loadInbox({ quiet: true });
   } catch (error) {
@@ -700,12 +403,12 @@ async function createMailbox(event) {
 
 async function copyAddress(address) {
   await writeClipboard(address);
-  setWidgetStatus(`Copied ${address}`, "success");
+  setWidgetStatus("Copied mail.", "success");
 }
 
 async function copyCode(code) {
   await writeClipboard(code);
-  setWidgetStatus(`Copied code ${code}`, "success");
+  setWidgetStatus("Copied code.", "success");
 }
 
 function startPolling() {
@@ -713,21 +416,17 @@ function startPolling() {
     clearInterval(widgetState.pollTimer);
   }
   widgetState.pollTimer = setInterval(() => {
-    loadInbox({ quiet: true }).catch(() => {
-      widgetEl.pollIndicator.textContent = "offline";
-    });
-    refreshSelectedMessageDetail().catch(() => undefined);
+    loadInbox({ quiet: true }).catch(() => setWidgetStatus("Offline.", "error"));
   }, 5_000);
 }
 
 async function bootWidget() {
   widgetState.config = await api("/client-config");
   renderDomainOptions();
-  renderTurnstile();
+  hideTurnstile();
   await loadMailboxes();
   await loadInbox({ quiet: true });
-  renderMessageReader();
-  setWidgetStatus(widgetState.sessionToken ? "Live. Waiting for new mail and codes." : "Generate a mailbox to start.");
+  setWidgetStatus(widgetState.sessionToken ? "Listening." : "Ready.");
   startPolling();
 }
 
@@ -752,17 +451,6 @@ widgetEl.domainOptionList.addEventListener("click", (event) => {
   setSelectedDomain(option.dataset.domainValue || "");
   closeDomainPicker();
 });
-widgetEl.refresh.addEventListener("click", () => {
-  loadInbox().catch((error) => setWidgetStatus(error.message, "error"));
-});
-widgetEl.fullLink?.addEventListener("click", (event) => {
-  if (!isNativeShell) {
-    return;
-  }
-
-  event.preventDefault();
-  invokeNativeShell("open_full_app", widgetEl.fullLink.href).catch((error) => setWidgetStatus(error.message, "error"));
-});
 widgetEl.addressCard.addEventListener("click", () => {
   const address = widgetEl.addressCard.dataset.copyAddress;
   if (address) {
@@ -780,40 +468,6 @@ widgetEl.nativeMinimize?.addEventListener("click", () => {
 });
 widgetEl.nativeClose?.addEventListener("click", () => {
   invokeNativeShell("close_window").catch((error) => setWidgetStatus(error.message, "error"));
-});
-widgetEl.codeList.addEventListener("click", (event) => {
-  const codeButton = event.target.closest("[data-copy-code]");
-  if (codeButton) {
-    copyCode(codeButton.dataset.copyCode).catch((error) => setWidgetStatus(error.message, "error"));
-    return;
-  }
-
-  const openButton = event.target.closest("[data-open-message]");
-  if (!openButton) {
-    return;
-  }
-  selectMessage(Number(openButton.dataset.openMessage)).catch((error) => setWidgetStatus(error.message, "error"));
-});
-widgetEl.archiveList.addEventListener("click", (event) => {
-  const codeButton = event.target.closest("[data-copy-code]");
-  if (codeButton) {
-    copyCode(codeButton.dataset.copyCode).catch((error) => setWidgetStatus(error.message, "error"));
-    return;
-  }
-
-  const openButton = event.target.closest("[data-open-message]");
-  if (!openButton) {
-    return;
-  }
-  selectMessage(Number(openButton.dataset.openMessage)).catch((error) => setWidgetStatus(error.message, "error"));
-});
-widgetEl.messageReader.addEventListener("click", (event) => {
-  const sourceTab = event.target.closest("[data-source-tab]");
-  if (!sourceTab || !widgetState.selectedMessage) {
-    return;
-  }
-  widgetState.selectedSourceTab = sourceTab.dataset.sourceTab || "text";
-  renderMessageReader(widgetState.selectedMessage);
 });
 document.addEventListener("click", (event) => {
   if (!widgetEl.domainPicker.contains(event.target)) {

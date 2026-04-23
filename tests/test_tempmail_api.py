@@ -113,11 +113,19 @@ def test_web_app_and_client_config_do_not_expose_private_turnstile_secret(tmp_pa
     assert "tempmail.sessionToken" in widget_script_response.text
     assert 'api("/mailboxes")' in widget_script_response.text
     assert 'api("/inbox")' in widget_script_response.text
-    assert "data-copy-code" in widget_script_response.text
+    assert "data-copy-latest-code" in widget_script_response.text
+    assert "renderArchive" not in widget_script_response.text
+    assert "renderCodes" not in widget_script_response.text
     assert "DeskMail" in widget_response.text
-    assert "Latest codes" in widget_response.text
+    assert "Last OTP" in widget_response.text
+    assert "Latest codes" not in widget_response.text
+    assert "Original source" not in widget_response.text
+    assert "Archive" not in widget_response.text
+    assert 'class="full-link"' not in widget_response.text
     assert ".desk-widget" in widget_style_response.text
-    assert ".code-card" in widget_style_response.text
+    assert ".widget-core" in widget_style_response.text
+    assert ".signal-card" in widget_style_response.text
+    assert ".code-card" not in widget_style_response.text
 
     assert config_response.status_code == 200
     payload = config_response.json()
