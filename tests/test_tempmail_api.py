@@ -126,6 +126,8 @@ def test_web_app_and_client_config_do_not_expose_private_turnstile_secret(tmp_pa
     assert ".widget-core" in widget_style_response.text
     assert ".signal-card" in widget_style_response.text
     assert ".code-card" not in widget_style_response.text
+    assert ".generator > button" in widget_style_response.text
+    assert ".generator button {" not in widget_style_response.text
 
     assert config_response.status_code == 200
     payload = config_response.json()
