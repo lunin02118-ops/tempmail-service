@@ -17,13 +17,23 @@
   <body>
     <div class="grain" aria-hidden="true"></div>
     <main class="archive-shell">
+      <nav class="site-tabs" aria-label="Site sections">
+        <a class="site-tab" href="/">
+          <span>01</span>
+          Temp mail
+        </a>
+        <a class="site-tab is-active" href="/admin/archive" aria-current="page">
+          <span>02</span>
+          Admin archive
+        </a>
+      </nav>
+
       <section class="archive-hero">
         <div>
           <p class="eyebrow">operator archive</p>
           <h1>All received mail.</h1>
           <p class="lede">Search every stored email across all generated mailboxes and inspect the original text, HTML, and raw payload.</p>
         </div>
-        <a class="home-link" href="/">Back to app</a>
       </section>
 
       <section class="archive-grid">

@@ -62,6 +62,54 @@ button {
   padding: 42px 0;
 }
 
+.site-tabs {
+  display: inline-flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  padding: 7px;
+  border: 1px solid rgba(25, 35, 49, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 249, 236, 0.68);
+  box-shadow: 0 14px 36px rgba(52, 38, 18, 0.1);
+  backdrop-filter: blur(14px);
+}
+
+.site-tab {
+  display: inline-flex;
+  gap: 9px;
+  align-items: center;
+  min-height: 42px;
+  border-radius: 999px;
+  padding: 0 15px;
+  color: var(--ink);
+  font-weight: 900;
+  text-decoration: none;
+  transition: transform 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.site-tab span {
+  color: var(--signal-dark);
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+}
+
+.site-tab:hover,
+.site-tab:focus-visible {
+  outline: none;
+  background: rgba(255, 255, 255, 0.58);
+  transform: translateY(-1px);
+}
+
+.site-tab.is-active {
+  background: var(--ink);
+  color: #fff7e5;
+  box-shadow: 0 12px 24px rgba(25, 35, 49, 0.16);
+}
+
+.site-tab.is-active span {
+  color: var(--mint);
+}
+
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
@@ -809,6 +857,17 @@ select:focus {
   .page-shell {
     width: min(100% - 20px, 720px);
     padding: 22px 0;
+  }
+
+  .site-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+
+  .site-tab {
+    justify-content: center;
+    padding: 0 10px;
   }
 
   .hero,
