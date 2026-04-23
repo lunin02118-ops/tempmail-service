@@ -183,7 +183,7 @@ a {
 }
 
 .is-native-shell .window-bar {
-  padding-right: 110px;
+  padding-right: 202px;
 }
 
 .window-identity {
@@ -217,6 +217,14 @@ a {
 
 .window-actions {
   flex: 0 0 auto;
+}
+
+.is-native-shell .window-actions {
+  position: absolute;
+  top: 12px;
+  right: 112px;
+  z-index: 31;
+  align-items: center;
 }
 
 .window-controls {
@@ -286,6 +294,7 @@ h2 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  height: 42px;
   padding: 0 14px;
   color: var(--text-soft);
   text-decoration: none;
@@ -1173,7 +1182,12 @@ h2 {
   }
 
   .is-native-shell .window-bar {
-    padding-right: 106px;
+    padding-right: 190px;
+  }
+
+  .is-native-shell .window-actions {
+    top: 12px;
+    right: 108px;
   }
 
   .is-native-shell .full-link,
