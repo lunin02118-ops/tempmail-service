@@ -64,11 +64,8 @@ def _load_local_env_file() -> None:
         return
 
     loaded_values: dict[str, str] = {}
-    for env_name in (".env", ".env.local"):
-        env_path = PROJECT_ROOT / env_name
-        if not env_path.exists():
-            continue
-
+    env_path = PROJECT_ROOT / ".env.local"
+    if env_path.exists():
         for raw_line in env_path.read_text(encoding="utf-8").splitlines():
             line = raw_line.strip()
             if not line or line.startswith("#") or "=" not in line:

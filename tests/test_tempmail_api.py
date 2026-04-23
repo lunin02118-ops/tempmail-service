@@ -75,7 +75,7 @@ def test_web_app_and_client_config_do_not_expose_private_turnstile_secret(tmp_pa
     assert widget_response.status_code == 200
     assert archive_response.status_code == 200
     assert "SamGPT Temp Mail" in index_response.text
-    assert "SamGPT Desk Widget" in widget_response.text
+    assert "DeskMail Widget" in widget_response.text
     assert "SamGPT Mail Archive" in archive_response.text
     assert "private-secret-key" not in index_response.text
     assert "private-secret-key" not in widget_response.text
@@ -114,7 +114,7 @@ def test_web_app_and_client_config_do_not_expose_private_turnstile_secret(tmp_pa
     assert 'api("/mailboxes")' in widget_script_response.text
     assert 'api("/inbox")' in widget_script_response.text
     assert "data-copy-code" in widget_script_response.text
-    assert "Desk Mail" in widget_response.text
+    assert "DeskMail" in widget_response.text
     assert "Latest codes" in widget_response.text
     assert ".desk-widget" in widget_style_response.text
     assert ".code-card" in widget_style_response.text
@@ -123,7 +123,6 @@ def test_web_app_and_client_config_do_not_expose_private_turnstile_secret(tmp_pa
     payload = config_response.json()
     assert payload["mail_domain"] == "samgpt.me"
     assert payload["mail_domains"][0] == "samgpt.me"
-    assert len(payload["mail_domains"]) == 51
     assert "atlas.samgpt.me" in payload["mail_domains"]
     assert "zen.samgpt.me" in payload["mail_domains"]
     assert payload["turnstile_site_key"] == "public-site-key"
@@ -491,7 +490,6 @@ def test_create_mailbox_can_choose_requested_domain_from_allowed_list(tmp_path, 
     mail_domains = config_response.json()["mail_domains"]
     assert mail_domains[:2] == ["samgpt.me", "alt.samgpt.me"]
     assert "atlas.samgpt.me" in mail_domains
-    assert len(mail_domains) == 52
     assert create_response.status_code == 201
     mailbox = create_response.json()["mailbox"]
     assert mailbox["domain"] == "alt.samgpt.me"

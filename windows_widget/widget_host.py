@@ -4,10 +4,21 @@ import argparse
 import ctypes
 import threading
 import time
+import webbrowser
 from ctypes import wintypes
-from pathlib import Path
 
 import webview
+
+try:
+    import pystray
+except ImportError:
+    pystray = None
+
+try:
+    from PIL import Image, ImageDraw
+except ImportError:
+    Image = None
+    ImageDraw = None
 
 try:
     from windows_widget.settings import (
@@ -32,7 +43,7 @@ except ModuleNotFoundError:
         webview_storage_dir,
     )
 
-TITLE = "SamGPT Desktop Widget"
+TITLE = "DeskMail Widget"
 
 user32 = ctypes.windll.user32
 
@@ -235,10 +246,158 @@ def build_overrides(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
-def create_window(settings: WidgetSettings) -> webview.Window:
+def build_tray_image():
+    if Image is None or ImageDraw is None:
+        raise RuntimeError("Pillow is required to build the tray icon.")
+
+    size = 64
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+
+    draw.rounded_rectangle((7, 8, 57, 56), radius=16, fill=(18, 29, 41, 255), outline=(141, 201, 192, 255), width=3)
+    draw.rounded_rectangle((17, 18, 47, 42), radius=8, outline=(239, 244, 247, 255), width=3)
+    draw.line((17, 20, 32, 32, 47, 20), fill=(233, 196, 131, 255), width=4)
+    draw.line((17, 40, 47, 40), fill=(141, 201, 192, 255), width=3)
+    draw.line((22, 47, 42, 47), fill=(239, 244, 247, 255), width=3)
+
+    return image
+
+
+class NativeShellApi:
+    def __init__(self, settings: WidgetSettings) -> None:
+        self._settings = settings
+        self._window: webview.Window | None = None
+        self._hwnd = 0
+        self._tray_icon: pystray.Icon | None = None
+        self._tray_lock = threading.RLock()
+        self._hidden_to_tray = False
+
+    def _tray_supported(self) -> bool:
+        return pystray is not None and Image is not None and ImageDraw is not None
+
+    def _attach_window(self, window: webview.Window) -> None:
+        self._window = window
+
+    def _set_hwnd(self, hwnd: int) -> None:
+        self._hwnd = hwnd
+
+    def _ensure_hwnd(self) -> int:
+        if self._hwnd and user32.IsWindow(self._hwnd):
+            return self._hwnd
+
+        self._hwnd = wait_for_window_handle(TITLE, timeout_seconds=3.0)
+        return self._hwnd
+
+    def _apply_window_mode(self) -> None:
+        hwnd = self._ensure_hwnd()
+        if not hwnd:
+            return
+
+        if self._settings.hide_from_taskbar:
+            apply_toolwindow(hwnd)
+
+        if self._settings.pin_desktop:
+            pin_to_desktop(hwnd)
+
+    def _start_tray(self) -> bool:
+        if not self._tray_supported():
+            return False
+
+        with self._tray_lock:
+            if self._tray_icon is not None:
+                return True
+
+            icon = pystray.Icon(
+                APP_NAME,
+                build_tray_image(),
+                "DeskMail",
+                menu=pystray.Menu(
+                    pystray.MenuItem("Show widget", self._menu_restore, default=True),
+                    pystray.MenuItem("Hide to tray", self._menu_hide),
+                    pystray.MenuItem("Quit DeskMail", self._menu_close),
+                ),
+            )
+            self._tray_icon = icon
+
+        threading.Thread(target=icon.run, daemon=True, name="deskmail-tray").start()
+        return True
+
+    def _notify_hidden(self) -> None:
+        with self._tray_lock:
+            icon = self._tray_icon
+
+        if icon is None:
+            return
+
+        try:
+            icon.notify("DeskMail is still running in the system tray.", "DeskMail")
+        except Exception:
+            pass
+
+    def _menu_restore(self, icon=None, item=None) -> None:
+        self.restore_from_tray()
+
+    def _menu_hide(self, icon=None, item=None) -> None:
+        self.minimize_to_tray()
+
+    def _menu_close(self, icon=None, item=None) -> None:
+        self.close_window()
+
+    def minimize_to_tray(self) -> dict[str, object]:
+        if self._window is None:
+            return {"ok": False, "mode": "missing"}
+
+        if not self._start_tray():
+            self._window.minimize()
+            return {"ok": True, "mode": "minimized"}
+
+        self._hidden_to_tray = True
+        self._window.hide()
+        self._notify_hidden()
+        return {"ok": True, "mode": "tray"}
+
+    def restore_from_tray(self) -> dict[str, object]:
+        if self._window is None:
+            return {"ok": False}
+
+        self._hidden_to_tray = False
+        self._window.show()
+        self._window.restore()
+        self._apply_window_mode()
+        return {"ok": True}
+
+    def close_window(self) -> bool:
+        self._stop_tray()
+        if self._window is not None:
+            self._window.destroy()
+        return True
+
+    def open_full_app(self, url: str) -> bool:
+        if not url:
+            return False
+        webbrowser.open(url, new=2, autoraise=True)
+        return True
+
+    def _stop_tray(self) -> None:
+        with self._tray_lock:
+            icon = self._tray_icon
+            self._tray_icon = None
+
+        if icon is not None:
+            try:
+                icon.stop()
+            except Exception:
+                pass
+
+    def _shutdown(self) -> None:
+        self._stop_tray()
+
+
+def create_window(settings: WidgetSettings, shell_api: NativeShellApi) -> webview.Window:
     return webview.create_window(
         TITLE,
         url=settings.url,
+        js_api=shell_api,
         width=settings.width,
         height=settings.height,
         x=settings.x,
@@ -246,23 +405,21 @@ def create_window(settings: WidgetSettings) -> webview.Window:
         resizable=True,
         min_size=(420, 560),
         frameless=True,
-        easy_drag=True,
+        easy_drag=False,
         shadow=True,
         on_top=settings.always_on_top,
-        background_color="#0B111D",
+        background_color="#0F1721",
         text_select=True,
     )
 
 
-def bootstrap_native_shell(window: webview.Window, settings: WidgetSettings) -> None:
+def bootstrap_native_shell(window: webview.Window, settings: WidgetSettings, shell_api: NativeShellApi) -> None:
     hwnd = wait_for_window_handle(TITLE)
     if not hwnd:
         return
 
-    if settings.hide_from_taskbar:
-        apply_toolwindow(hwnd)
-    if settings.pin_desktop:
-        pin_to_desktop(hwnd)
+    shell_api._set_hwnd(hwnd)
+    shell_api._apply_window_mode()
 
     if settings.close_after > 0:
         time.sleep(settings.close_after)
@@ -282,12 +439,16 @@ def main() -> None:
     saved = load_saved_settings()
     settings = with_default_position(resolve_settings(saved, build_overrides(args)))
 
-    window = create_window(settings)
+    shell_api = NativeShellApi(settings)
+    window = create_window(settings, shell_api)
+    shell_api._attach_window(window)
+
     window.events.moved += lambda *_: persist_window_state(window, settings)
     window.events.resized += lambda *_: persist_window_state(window, settings)
     window.events.closing += lambda *_: persist_window_state(window, settings)
+    window.events.closing += lambda *_: shell_api._shutdown()
     window.events.shown += lambda *_: threading.Thread(
-        target=bootstrap_native_shell, args=(window, settings), daemon=True
+        target=bootstrap_native_shell, args=(window, settings, shell_api), daemon=True
     ).start()
 
     # Keep the default browser UA so Cloudflare Turnstile sees a normal WebView2/Edge client.

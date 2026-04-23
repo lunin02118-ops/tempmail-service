@@ -41,11 +41,36 @@ const widgetEl = {
   messageReader: document.querySelector("#message-reader"),
   pollIndicator: document.querySelector("#poll-indicator"),
   fullLink: document.querySelector(".full-link"),
+  nativeMinimize: document.querySelector("#native-minimize"),
+  nativeClose: document.querySelector("#native-close"),
 };
 
 function setWidgetStatus(message, tone = "neutral") {
   widgetEl.status.textContent = message;
   widgetEl.status.dataset.tone = tone;
+}
+
+function syncNativeControls() {
+  const ready = Boolean(window.pywebview?.api);
+  document.documentElement.classList.toggle("native-api-ready", ready);
+
+  for (const button of [widgetEl.nativeMinimize, widgetEl.nativeClose]) {
+    if (!button) {
+      continue;
+    }
+    button.disabled = isNativeShell ? !ready : true;
+  }
+}
+
+async function invokeNativeShell(method, ...args) {
+  syncNativeControls();
+
+  const api = window.pywebview?.api;
+  if (!isNativeShell || !api || typeof api[method] !== "function") {
+    throw new Error("Native desktop controls are not ready yet.");
+  }
+
+  return api[method](...args);
 }
 
 function escapeHtml(value) {
@@ -368,7 +393,7 @@ function renderAddress() {
   widgetEl.addressCard.innerHTML = `
     <small>Current address</small>
     <strong>${escapeHtml(mailbox.address)}</strong>
-    <span>Click to copy email</span>
+    <span>Click to copy the active mailbox</span>
   `;
 }
 
@@ -565,7 +590,7 @@ async function loadInbox({ quiet = false } = {}) {
   renderArchive();
   const newestCode = widgetState.messages.find((message) => message.otp_code && Number(message.id) > previousSeen);
   if (newestCode) {
-    document.title = `${newestCode.otp_code} · SamGPT Desk Widget`;
+    document.title = `${newestCode.otp_code} · DeskMail Widget`;
     setWidgetStatus(`New code: ${newestCode.otp_code}`, "success");
   } else if (!quiet) {
     setWidgetStatus(widgetState.messages.length ? "Inbox synced." : "Listening for incoming mail.");
@@ -666,8 +691,13 @@ async function bootWidget() {
   await loadMailboxes();
   await loadInbox({ quiet: true });
   renderMessageReader();
-  setWidgetStatus(widgetState.sessionToken ? "Live. Waiting for codes." : "Generate a mailbox to start.");
+  setWidgetStatus(widgetState.sessionToken ? "Live. Waiting for new mail and codes." : "Generate a mailbox to start.");
   startPolling();
+}
+
+if (isNativeShell) {
+  syncNativeControls();
+  window.addEventListener("pywebviewready", syncNativeControls);
 }
 
 widgetEl.form.addEventListener("submit", createMailbox);
@@ -689,11 +719,25 @@ widgetEl.domainOptionList.addEventListener("click", (event) => {
 widgetEl.refresh.addEventListener("click", () => {
   loadInbox().catch((error) => setWidgetStatus(error.message, "error"));
 });
+widgetEl.fullLink?.addEventListener("click", (event) => {
+  if (!isNativeShell) {
+    return;
+  }
+
+  event.preventDefault();
+  invokeNativeShell("open_full_app", widgetEl.fullLink.href).catch((error) => setWidgetStatus(error.message, "error"));
+});
 widgetEl.addressCard.addEventListener("click", () => {
   const address = widgetEl.addressCard.dataset.copyAddress;
   if (address) {
     copyAddress(address).catch((error) => setWidgetStatus(error.message, "error"));
   }
+});
+widgetEl.nativeMinimize?.addEventListener("click", () => {
+  invokeNativeShell("minimize_to_tray").catch((error) => setWidgetStatus(error.message, "error"));
+});
+widgetEl.nativeClose?.addEventListener("click", () => {
+  invokeNativeShell("close_window").catch((error) => setWidgetStatus(error.message, "error"));
 });
 widgetEl.codeList.addEventListener("click", (event) => {
   const codeButton = event.target.closest("[data-copy-code]");
@@ -740,4 +784,4 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-  bootWidget().catch((error) => setWidgetStatus(error.message, "error"));
+bootWidget().catch((error) => setWidgetStatus(error.message, "error"));
