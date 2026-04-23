@@ -33,7 +33,7 @@
             </div>
           </div>
           <div class="window-actions">
-            <a class="full-link" href="/" target="_blank" rel="noreferrer">Full app</a>
+            <a class="full-link" href="/" target="_blank" rel="noreferrer">Open</a>
             <div class="window-controls" aria-label="Window controls">
               <button
                 id="native-minimize"
@@ -60,20 +60,42 @@
         </header>
 
         <section class="overview-panel" aria-label="Mailbox overview and primary actions">
-          <div class="overview-copy">
-            <p class="eyebrow">desktop otp receiver</p>
-            <h2>Keep the active inbox and the newest codes in plain sight.</h2>
-            <p class="overview-text">
-              Generate a mailbox, copy the current address, and stay focused on incoming OTPs. The
-              full archive and raw message source stay available further down when you need them.
-            </p>
+          <div class="snapshot-head">
+            <div>
+              <p class="eyebrow">live inbox</p>
+              <h2>OTP console</h2>
+            </div>
+            <span id="sync-state" class="sync-state">idle</span>
           </div>
 
-          <button id="address-card" class="address-card is-empty" type="button" disabled>
-            <small>Current address</small>
-            <strong>No address yet</strong>
-            <span>Generate one to start listening</span>
-          </button>
+          <div class="snapshot-grid">
+            <button id="address-card" class="address-card is-empty" type="button" disabled>
+              <small>Current address</small>
+              <strong>No address yet</strong>
+              <span>Generate one to start listening</span>
+            </button>
+
+            <button id="latest-code-card" class="signal-card is-empty" type="button" disabled>
+              <small>Last OTP</small>
+              <strong id="latest-code-value">Waiting</strong>
+              <span id="latest-code-meta">No code received yet</span>
+            </button>
+          </div>
+
+          <div class="telemetry-row" aria-label="Inbox status">
+            <span class="telemetry-pill">
+              <small>mail</small>
+              <strong id="mail-count">0</strong>
+            </span>
+            <span class="telemetry-pill">
+              <small>codes</small>
+              <strong id="code-count">0</strong>
+            </span>
+            <span class="telemetry-pill">
+              <small>domain</small>
+              <strong id="domain-summary">...</strong>
+            </span>
+          </div>
 
           <form id="widget-form" class="generator">
             <label class="domain-field">
@@ -130,11 +152,6 @@
             <p>Codes will appear here automatically.</p>
           </div>
         </section>
-
-        <p class="scroll-cue">
-          Archive and original source stay below so the main widget keeps the active mailbox and OTP
-          flow in view.
-        </p>
 
         <section class="archive-panel" aria-label="Mail archive">
           <div class="codes-header">

@@ -33,6 +33,13 @@ const widgetEl = {
   generate: document.querySelector("#generate"),
   turnstileSlot: document.querySelector("#turnstile-slot"),
   addressCard: document.querySelector("#address-card"),
+  latestCodeCard: document.querySelector("#latest-code-card"),
+  latestCodeValue: document.querySelector("#latest-code-value"),
+  latestCodeMeta: document.querySelector("#latest-code-meta"),
+  mailCount: document.querySelector("#mail-count"),
+  codeCount: document.querySelector("#code-count"),
+  domainSummary: document.querySelector("#domain-summary"),
+  syncState: document.querySelector("#sync-state"),
   status: document.querySelector("#status"),
   refresh: document.querySelector("#refresh"),
   codeList: document.querySelector("#code-list"),
@@ -235,6 +242,7 @@ function setSelectedDomain(domain) {
   widgetState.selectedDomain = domain;
   widgetEl.domainValue.value = domain;
   widgetEl.domainCurrent.textContent = domain ? `@${domain}` : "@domain";
+  widgetEl.domainSummary.textContent = domain ? domain.replace(".samgpt.me", "") : "...";
 
   for (const option of widgetEl.domainOptionList.querySelectorAll("[data-domain-value]")) {
     const isActive = option.dataset.domainValue === domain;
@@ -397,6 +405,29 @@ function renderAddress() {
   `;
 }
 
+function renderSnapshot() {
+  const codedMessages = widgetState.messages.filter((message) => message.otp_code);
+  const latestCode = codedMessages[0] || null;
+
+  widgetEl.mailCount.textContent = String(widgetState.messages.length);
+  widgetEl.codeCount.textContent = String(codedMessages.length);
+
+  if (!latestCode) {
+    widgetEl.latestCodeCard.className = "signal-card is-empty";
+    widgetEl.latestCodeCard.disabled = true;
+    widgetEl.latestCodeCard.removeAttribute("data-copy-latest-code");
+    widgetEl.latestCodeValue.textContent = "Waiting";
+    widgetEl.latestCodeMeta.textContent = widgetState.sessionToken ? "No OTP yet" : "Generate inbox first";
+    return;
+  }
+
+  widgetEl.latestCodeCard.className = "signal-card";
+  widgetEl.latestCodeCard.disabled = false;
+  widgetEl.latestCodeCard.dataset.copyLatestCode = latestCode.otp_code;
+  widgetEl.latestCodeValue.textContent = latestCode.otp_code;
+  widgetEl.latestCodeMeta.textContent = `${senderLabel(latestCode)} / ${formatTime(latestCode.received_at)}`;
+}
+
 function renderMessageReader(message = widgetState.selectedMessage) {
   if (!message) {
     widgetEl.messageReader.className = "message-reader empty";
@@ -467,6 +498,7 @@ function renderCodes() {
   if (!messagesWithCodes.length) {
     widgetEl.codeList.className = "code-list empty";
     widgetEl.codeList.innerHTML = "<p>Waiting for verification codes. New OTPs appear automatically.</p>";
+    renderSnapshot();
     if (!widgetState.messages.length) {
       widgetState.selectedMessageId = null;
       widgetState.selectedMessage = null;
@@ -476,6 +508,7 @@ function renderCodes() {
   }
 
   widgetEl.codeList.className = "code-list";
+  renderSnapshot();
   widgetEl.codeList.innerHTML = messagesWithCodes
     .map((message) => {
       const isNew = Number(message.id) > widgetState.lastSeenMessageId ? " is-new" : "";
@@ -580,10 +613,12 @@ async function loadInbox({ quiet = false } = {}) {
     renderCodes();
     renderArchive();
     widgetEl.pollIndicator.textContent = "idle";
+    widgetEl.syncState.textContent = "idle";
     return;
   }
 
   widgetEl.pollIndicator.textContent = "syncing";
+  widgetEl.syncState.textContent = "syncing";
   const previousSeen = widgetState.lastSeenMessageId;
   widgetState.messages = await api("/inbox");
   renderCodes();
@@ -597,6 +632,7 @@ async function loadInbox({ quiet = false } = {}) {
   }
   rememberSeenMessages();
   widgetEl.pollIndicator.textContent = "live";
+  widgetEl.syncState.textContent = "live";
 }
 
 async function selectMessage(messageId, { quiet = false } = {}) {
@@ -731,6 +767,12 @@ widgetEl.addressCard.addEventListener("click", () => {
   const address = widgetEl.addressCard.dataset.copyAddress;
   if (address) {
     copyAddress(address).catch((error) => setWidgetStatus(error.message, "error"));
+  }
+});
+widgetEl.latestCodeCard.addEventListener("click", () => {
+  const code = widgetEl.latestCodeCard.dataset.copyLatestCode;
+  if (code) {
+    copyCode(code).catch((error) => setWidgetStatus(error.message, "error"));
   }
 });
 widgetEl.nativeMinimize?.addEventListener("click", () => {

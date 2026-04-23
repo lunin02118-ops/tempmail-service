@@ -330,9 +330,9 @@ h2 {
 .codes-panel,
 .archive-panel,
 .reader-panel {
-  padding: 16px;
+  padding: 14px;
   border: 1px solid var(--line);
-  border-radius: 24px;
+  border-radius: 22px;
   background:
     linear-gradient(180deg, rgba(24, 37, 51, 0.92), rgba(16, 25, 35, 0.94)),
     var(--panel-soft);
@@ -341,18 +341,76 @@ h2 {
 
 .overview-panel {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
-.overview-copy {
+.snapshot-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.snapshot-head h2 {
+  font-size: 1.45rem;
+  letter-spacing: -0.025em;
+}
+
+.sync-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 66px;
+  min-height: 32px;
+  border: 1px solid rgba(146, 216, 165, 0.24);
+  border-radius: 999px;
+  background: rgba(146, 216, 165, 0.08);
+  color: var(--success);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.snapshot-grid {
   display: grid;
   gap: 8px;
 }
 
-.overview-text {
-  margin: 0;
-  color: var(--text-soft);
-  line-height: 1.5;
+.telemetry-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.telemetry-pill {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.telemetry-pill small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.63rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.telemetry-pill strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.94rem;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .generator {
@@ -566,7 +624,7 @@ h2 {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 82px;
+  min-height: 62px;
   padding: 10px 12px;
   border: 1px dashed rgba(171, 191, 209, 0.2);
   border-radius: 18px;
@@ -596,13 +654,14 @@ h2 {
   max-width: 100%;
 }
 
-.address-card {
+.address-card,
+.signal-card {
   display: grid;
   width: 100%;
   gap: 6px;
-  padding: 16px;
+  padding: 13px 14px;
   border: 1px solid rgba(183, 227, 220, 0.18);
-  border-radius: 22px;
+  border-radius: 20px;
   background:
     linear-gradient(135deg, rgba(141, 201, 192, 0.14), rgba(255, 255, 255, 0.04)),
     rgba(18, 30, 42, 0.86);
@@ -612,34 +671,49 @@ h2 {
 }
 
 .address-card:not(:disabled):hover,
-.address-card:not(:disabled):focus-visible {
+.address-card:not(:disabled):focus-visible,
+.signal-card:not(:disabled):hover,
+.signal-card:not(:disabled):focus-visible {
   border-color: rgba(183, 227, 220, 0.34);
   box-shadow: 0 18px 34px rgba(6, 12, 18, 0.28);
   transform: translateY(-1px);
 }
 
 .address-card small,
-.address-card span {
+.address-card span,
+.signal-card small,
+.signal-card span {
   color: var(--text-muted);
   font-weight: 800;
 }
 
-.address-card small {
+.address-card small,
+.signal-card small {
   font-size: 0.72rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
-.address-card strong {
+.address-card strong,
+.signal-card strong {
   overflow-wrap: anywhere;
-  font-size: 1.08rem;
+  font-size: 1.02rem;
 }
 
-.address-card span {
+.signal-card strong {
+  color: var(--accent-warm);
+  font-size: 1.8rem;
+  letter-spacing: 0.03em;
+  line-height: 0.95;
+}
+
+.address-card span,
+.signal-card span {
   font-size: 0.82rem;
 }
 
-.address-card.is-empty {
+.address-card.is-empty,
+.signal-card.is-empty {
   border-color: var(--line);
   background: rgba(255, 255, 255, 0.03);
 }
@@ -1076,5 +1150,26 @@ h2 {
   .full-link {
     width: 100%;
     justify-content: center;
+  }
+
+  .is-native-shell .window-bar,
+  .is-native-shell .window-actions,
+  .is-native-shell .status-row {
+    flex-wrap: nowrap;
+  }
+
+  .is-native-shell .window-bar,
+  .is-native-shell .status-row {
+    align-items: center;
+  }
+
+  .is-native-shell .full-link,
+  .is-native-shell .refresh-button,
+  .is-native-shell .generator button {
+    width: auto;
+  }
+
+  .is-native-shell .generator {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 }
