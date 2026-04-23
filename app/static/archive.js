@@ -253,7 +253,7 @@ function renderDetail(message) {
 
 async function loadArchive() {
   if (!state.token) {
-    setStatus("Enter the admin token to load mail.");
+    setStatus("Enter the admin password to load mail.");
     return;
   }
   const q = el.query.value.trim();
