@@ -38,6 +38,7 @@ const widgetEl = {
   codeList: document.querySelector("#code-list"),
   messageReader: document.querySelector("#message-reader"),
   pollIndicator: document.querySelector("#poll-indicator"),
+  fullLink: document.querySelector(".full-link"),
 };
 
 function setWidgetStatus(message, tone = "neutral") {
@@ -66,6 +67,23 @@ function formatTime(value) {
 
 function senderLabel(message) {
   return message.sender_brand || message.from_address || "unknown sender";
+}
+
+function updateFullLink() {
+  if (!widgetEl.fullLink) {
+    return;
+  }
+
+  const hashParams = new URLSearchParams();
+  if (widgetState.sessionToken) {
+    hashParams.set("session_token", widgetState.sessionToken);
+  }
+  if (widgetState.selectedMessageId) {
+    hashParams.set("message_id", String(widgetState.selectedMessageId));
+  }
+
+  const hash = hashParams.toString();
+  widgetEl.fullLink.href = hash ? `/#${hash}` : "/";
 }
 
 function formatRawPayload(rawValue) {
@@ -449,7 +467,13 @@ function renderCodes() {
             </span>
             <span class="code-open-hint">Open mail</span>
           </button>
-          <button class="code-copy-button" type="button" data-copy-code="${escapeHtml(message.otp_code)}" aria-label="Copy code ${escapeHtml(message.otp_code)}">
+          <button
+            class="code-copy-button"
+            type="button"
+            data-copy-code="${escapeHtml(message.otp_code)}"
+            data-open-message="${message.id}"
+            aria-label="Copy code ${escapeHtml(message.otp_code)}"
+          >
             ${escapeHtml(message.otp_code)}
           </button>
         </article>
@@ -468,10 +492,12 @@ async function loadMailboxes() {
   if (!widgetState.sessionToken) {
     widgetState.mailboxes = [];
     renderAddress();
+    updateFullLink();
     return;
   }
   widgetState.mailboxes = await api("/mailboxes");
   renderAddress();
+  updateFullLink();
 }
 
 async function loadInbox({ quiet = false } = {}) {
@@ -497,13 +523,18 @@ async function loadInbox({ quiet = false } = {}) {
   widgetEl.pollIndicator.textContent = "live";
 }
 
-async function selectMessage(messageId) {
+async function selectMessage(messageId, { quiet = false } = {}) {
   widgetState.selectedMessageId = messageId;
   renderCodes();
-  setWidgetStatus("Opening original email...");
+  if (!quiet) {
+    setWidgetStatus("Opening original email...");
+  }
   const message = await api(`/messages/${messageId}`);
   renderMessageReader(message);
-  setWidgetStatus(`Opened ${message.subject || "message"}.`);
+  updateFullLink();
+  if (!quiet) {
+    setWidgetStatus(`Opened ${message.subject || "message"}.`);
+  }
 }
 
 async function refreshSelectedMessageDetail() {
@@ -542,6 +573,7 @@ async function createMailbox(event) {
     });
     widgetState.sessionToken = payload.session_token;
     localStorage.setItem("tempmail.sessionToken", payload.session_token);
+    updateFullLink();
     setWidgetStatus(`Generated ${payload.mailbox.address}`, "success");
     await loadMailboxes();
     await loadInbox({ quiet: true });
@@ -614,7 +646,9 @@ widgetEl.addressCard.addEventListener("click", () => {
 widgetEl.codeList.addEventListener("click", (event) => {
   const codeButton = event.target.closest("[data-copy-code]");
   if (codeButton) {
-    copyCode(codeButton.dataset.copyCode).catch((error) => setWidgetStatus(error.message, "error"));
+    selectMessage(Number(codeButton.dataset.openMessage), { quiet: true })
+      .then(() => copyCode(codeButton.dataset.copyCode))
+      .catch((error) => setWidgetStatus(error.message, "error"));
     return;
   }
 
@@ -643,4 +677,4 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-bootWidget().catch((error) => setWidgetStatus(error.message, "error"));
+  bootWidget().catch((error) => setWidgetStatus(error.message, "error"));

@@ -25,6 +25,26 @@ const el = {
   analyze: document.querySelector("#analyze"),
 };
 
+function importSharedSessionFromUrl() {
+  const searchParams = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "");
+  const sessionToken = hashParams.get("session_token") || searchParams.get("session_token") || "";
+  const messageIdRaw = hashParams.get("message_id") || searchParams.get("message_id") || "";
+  const messageId = Number.parseInt(messageIdRaw, 10);
+
+  if (sessionToken) {
+    state.sessionToken = sessionToken;
+    localStorage.setItem("tempmail.sessionToken", sessionToken);
+  }
+  if (Number.isFinite(messageId) && messageId > 0) {
+    state.selectedMessageId = messageId;
+  }
+
+  if (sessionToken || messageIdRaw) {
+    history.replaceState(null, "", window.location.pathname);
+  }
+}
+
 function setStatus(message, tone = "neutral") {
   el.status.textContent = message;
   el.status.dataset.tone = tone;
@@ -625,6 +645,7 @@ async function copyCode(code) {
 }
 
 async function boot() {
+  importSharedSessionFromUrl();
   state.config = await api("/client-config");
   renderDomainOptions();
   if (state.config.mailbox_default_ttl_minutes) {
@@ -636,6 +657,9 @@ async function boot() {
     try {
       await loadMailboxes();
       await loadInbox();
+      if (state.selectedMessageId && state.messages.some((message) => Number(message.id) === Number(state.selectedMessageId))) {
+        await selectMessage(state.selectedMessageId);
+      }
     } catch {
       localStorage.removeItem("tempmail.sessionToken");
       state.sessionToken = "";
