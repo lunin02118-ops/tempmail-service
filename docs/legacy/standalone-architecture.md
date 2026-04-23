@@ -33,7 +33,7 @@ Hermes можно использовать только как временну�
    - локальная БД приложения;
    - таблицы aliases, inbound_messages, deliveries, app_settings.
 6. Config/runtime
-   - `.env` / config file;
+   - `.env.local` / config file;
    - отдельные OAuth credentials;
    - отдельный bot token;
    - собственный systemd unit / Docker container.
@@ -197,7 +197,7 @@ Hermes можно использовать только как временну�
 ## Миграция на другой сервер
 Чтобы приложение было легко перенести, на новом сервере должно быть достаточно:
 1. скопировать репозиторий;
-2. перенести `.env`;
+2. перенести `.env.local`;
 3. перенести OAuth credentials/token;
 4. перенести SQLite DB или поднять PostgreSQL;
 5. запустить Docker Compose или systemd unit.

@@ -21,3 +21,4 @@ dist/
 build/
 *.spec
 output/
+data/

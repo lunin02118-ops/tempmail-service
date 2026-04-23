@@ -38,7 +38,7 @@
 
 ### Основные файлы
 - `app/main.py` — FastAPI bootstrap и выбор режима запуска;
-- `app/config.py` — загрузка конфигурации из environment и локального `.env`;
+- `app/config.py` — загрузка конфигурации из environment и локального `.env.local`;
 - `app/db.py` — инициализация SQLite и создание таблиц;
 - `app/worker.py` — polling worker для Gmail и Telegram updates;
 - `app/api/aliases.py` — HTTP API для alias-ов;
@@ -74,13 +74,13 @@
 
 ### Источник конфигурации
 1. Environment variables.
-2. Локальный файл `.env` в корне проекта.
+2. Локальный файл `.env.local` в корне проекта.
 
-Локальный `.env` автоматически подгружается, если:
+Локальный `.env.local` автоматически подгружается, если:
 - не выставлен `APP_ENV=test`;
 - не идет запуск под pytest.
 
-Это важно: тесты изолированы от локального `.env`.
+Это важно: тесты изолированы от локального `.env.local`.
 
 ### Пример ожидаемых переменных
 Из `.env.example`:
