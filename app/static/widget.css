@@ -116,7 +116,7 @@ button {
 }
 
 .desk-widget {
-  width: min(430px, 100%);
+  width: min(448px, 100%);
   max-height: calc(100vh - 24px);
   overflow-y: auto;
   padding: 14px;
@@ -281,15 +281,20 @@ h1 {
 
 .generator {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "domain"
+    "submit";
   gap: 10px;
   margin: 0;
+  width: 100%;
 }
 
 .generator label {
   display: grid;
   gap: 7px;
   min-width: 0;
+  width: 100%;
   color: var(--text-muted);
   font-size: 0.72rem;
   font-weight: 800;
@@ -300,6 +305,11 @@ h1 {
 .domain-field,
 .domain-picker {
   position: relative;
+  width: 100%;
+}
+
+.domain-field {
+  grid-area: domain;
 }
 
 .domain-trigger,
@@ -314,7 +324,7 @@ h1 {
   justify-content: space-between;
   width: 100%;
   min-width: 0;
-  padding: 0 14px;
+  padding: 0 16px;
   border: 1px solid var(--line);
   background: var(--panel-muted);
   color: var(--text);
@@ -342,7 +352,7 @@ h1 {
 .domain-current {
   overflow: hidden;
   color: var(--text);
-  font-size: 0.96rem;
+  font-size: 0.9rem;
   font-weight: 800;
   text-overflow: ellipsis;
   text-transform: none;
@@ -461,7 +471,9 @@ h1 {
 }
 
 .generator button {
-  align-self: end;
+  grid-area: submit;
+  justify-self: end;
+  min-width: 132px;
   padding: 0 16px;
   border-color: rgba(233, 196, 131, 0.22);
   background:
@@ -469,6 +481,7 @@ h1 {
     rgba(233, 196, 131, 0.96);
   color: #0f1721;
   font-weight: 900;
+  white-space: nowrap;
 }
 
 .generator button:hover,
@@ -640,10 +653,14 @@ h1 {
 @media (max-width: 460px) {
   .generator {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "domain"
+      "submit";
   }
 
   .generator button {
     width: 100%;
+    justify-self: stretch;
     justify-content: center;
   }
 
@@ -652,10 +669,10 @@ h1 {
   }
 
   .is-native-shell .generator {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 1fr;
   }
 
   .is-native-shell .generator button {
-    width: auto;
+    width: 100%;
   }
 }
