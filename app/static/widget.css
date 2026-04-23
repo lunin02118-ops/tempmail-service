@@ -496,6 +496,12 @@ h2 {
   padding-top: 16px;
 }
 
+.reader-panel {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
 .poll-indicator {
   display: inline-flex;
   align-items: center;
@@ -545,12 +551,12 @@ h2 {
 .code-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
+  gap: 9px;
+  align-items: stretch;
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 20px;
-  padding: 12px;
+  padding: 10px;
   background: rgba(255, 255, 255, 0.07);
   color: var(--paper);
   text-align: left;
@@ -564,11 +570,51 @@ h2 {
     rgba(255, 255, 255, 0.07);
 }
 
+.code-card.is-selected {
+  border-color: rgba(118, 231, 255, 0.5);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.18);
+}
+
 .code-card:hover,
-.code-card:focus-visible {
+.code-card:focus-within {
   border-color: rgba(118, 231, 255, 0.48);
-  outline: none;
   transform: translateY(-1px);
+}
+
+.code-open,
+.code-copy-button {
+  border: 0;
+  border-radius: 16px;
+  color: inherit;
+}
+
+.code-open {
+  display: grid;
+  gap: 7px;
+  align-content: center;
+  min-width: 0;
+  padding: 8px 10px;
+  background: transparent;
+  text-align: left;
+}
+
+.code-open:hover,
+.code-open:focus-visible {
+  outline: none;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.code-open-hint {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: rgba(118, 231, 255, 0.12);
+  color: var(--cyan);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .code-meta {
@@ -594,7 +640,8 @@ h2 {
   font-weight: 800;
 }
 
-.code-value {
+.code-copy-button {
+  align-self: center;
   border-radius: 999px;
   padding: 8px 11px;
   background: var(--mint);
@@ -602,6 +649,147 @@ h2 {
   font-size: 1.05rem;
   font-weight: 900;
   letter-spacing: 0.03em;
+}
+
+.code-copy-button:hover,
+.code-copy-button:focus-visible {
+  outline: none;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+  transform: translateY(-1px);
+}
+
+.message-reader {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.message-reader.empty {
+  min-height: 120px;
+  place-items: center;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.message-reader.empty p {
+  max-width: 240px;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.reader-heading,
+.reader-summary,
+.reader-source-head {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.reader-heading small,
+.reader-summary small,
+.reader-source-head small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.reader-heading strong {
+  overflow-wrap: anywhere;
+  font-size: 1.02rem;
+}
+
+.reader-heading span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.reader-summary p {
+  margin: 0;
+  color: var(--paper);
+  line-height: 1.38;
+}
+
+.reader-source-head {
+  gap: 10px;
+}
+
+.source-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.source-tab {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--paper);
+  font-size: 0.76rem;
+  font-weight: 800;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.source-tab:hover,
+.source-tab:focus-visible {
+  border-color: rgba(118, 231, 255, 0.4);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.source-tab.is-active {
+  border-color: rgba(199, 255, 101, 0.4);
+  background: rgba(199, 255, 101, 0.12);
+  color: var(--mint);
+}
+
+.source-preview {
+  display: grid;
+  gap: 10px;
+}
+
+.source-preview-frame {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.source-frame {
+  display: block;
+  width: 100%;
+  height: 180px;
+  border: 0;
+  background: #fffdf7;
+}
+
+.source-pre,
+.reader-empty {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  padding: 13px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--paper);
+  font: 0.82rem/1.5 "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.reader-empty {
+  color: var(--muted);
 }
 
 @keyframes dock-in {

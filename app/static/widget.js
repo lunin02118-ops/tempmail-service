@@ -14,6 +14,9 @@ const widgetState = {
   selectedDomain: "",
   mailboxes: [],
   messages: [],
+  selectedMessageId: null,
+  selectedMessage: null,
+  selectedSourceTab: "text",
   lastSeenMessageId: Number(localStorage.getItem("tempmail.widget.lastSeenMessageId") || "0"),
   pollTimer: null,
 };
@@ -33,6 +36,7 @@ const widgetEl = {
   status: document.querySelector("#status"),
   refresh: document.querySelector("#refresh"),
   codeList: document.querySelector("#code-list"),
+  messageReader: document.querySelector("#message-reader"),
   pollIndicator: document.querySelector("#poll-indicator"),
 };
 
@@ -62,6 +66,83 @@ function formatTime(value) {
 
 function senderLabel(message) {
   return message.sender_brand || message.from_address || "unknown sender";
+}
+
+function formatRawPayload(rawValue) {
+  const raw = String(rawValue || "").trim();
+  if (!raw) {
+    return "";
+  }
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
+}
+
+function getSourceTabs(message) {
+  const tabs = [];
+  if (String(message?.body_text || "").trim()) {
+    tabs.push("text");
+  }
+  if (String(message?.body_html || "").trim()) {
+    tabs.push("html");
+  }
+  if (String(message?.raw_payload_json || "").trim()) {
+    tabs.push("raw");
+  }
+  return tabs.length ? tabs : ["text"];
+}
+
+function sourceTabLabel(tab) {
+  if (tab === "html") {
+    return "HTML";
+  }
+  if (tab === "raw") {
+    return "Raw";
+  }
+  return "Text";
+}
+
+function resolveSourceTab(message) {
+  const tabs = getSourceTabs(message);
+  return tabs.includes(widgetState.selectedSourceTab) ? widgetState.selectedSourceTab : tabs[0];
+}
+
+function mountHtmlPreview(root, message) {
+  const frame = root.querySelector("[data-html-preview]");
+  if (!frame) {
+    return;
+  }
+
+  const html = String(message?.body_html || "").trim();
+  if (!html) {
+    frame.srcdoc = "<body></body>";
+    return;
+  }
+
+  frame.srcdoc = `
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <style>
+          body {
+            margin: 0;
+            padding: 14px;
+            color: #111a2a;
+            font: 14px/1.45 "Segoe UI", Arial, sans-serif;
+            background: #fffdf6;
+            overflow-wrap: anywhere;
+          }
+          img, table { max-width: 100%; }
+          pre { white-space: pre-wrap; }
+          a { color: #9d2b18; }
+        </style>
+      </head>
+      <body>${html}</body>
+    </html>
+  `;
 }
 
 async function writeClipboard(value) {
@@ -271,11 +352,81 @@ function renderAddress() {
   `;
 }
 
+function renderMessageReader(message = widgetState.selectedMessage) {
+  if (!message) {
+    widgetEl.messageReader.className = "message-reader empty";
+    widgetEl.messageReader.innerHTML = "<p>Pick a code card to inspect the original message text, HTML, and raw payload.</p>";
+    return;
+  }
+
+  widgetState.selectedMessage = message;
+  const activeTab = resolveSourceTab(message);
+  widgetState.selectedSourceTab = activeTab;
+  const analysis = message.analysis || {};
+  const sourceTabs = getSourceTabs(message)
+    .map(
+      (tab) => `
+        <button
+          class="source-tab${tab === activeTab ? " is-active" : ""}"
+          type="button"
+          role="tab"
+          aria-selected="${tab === activeTab ? "true" : "false"}"
+          data-source-tab="${tab}"
+        >
+          ${sourceTabLabel(tab)}
+        </button>
+      `,
+    )
+    .join("");
+
+  let sourceBody = '<div class="reader-empty">Original content is missing for this message.</div>';
+  if (activeTab === "html" && String(message.body_html || "").trim()) {
+    sourceBody = `
+      <div class="source-preview">
+        <div class="source-preview-frame">
+          <iframe class="source-frame" title="HTML email preview" sandbox data-html-preview></iframe>
+        </div>
+        <pre class="source-pre source-pre--html">${escapeHtml(message.body_html)}</pre>
+      </div>
+    `;
+  } else if (activeTab === "raw" && String(message.raw_payload_json || "").trim()) {
+    sourceBody = `<pre class="source-pre source-pre--raw">${escapeHtml(formatRawPayload(message.raw_payload_json))}</pre>`;
+  } else if (String(message.body_text || "").trim()) {
+    sourceBody = `<pre class="source-pre">${escapeHtml(message.body_text)}</pre>`;
+  }
+
+  widgetEl.messageReader.className = "message-reader";
+  widgetEl.messageReader.innerHTML = `
+    <div class="reader-heading">
+      <small>Subject</small>
+      <strong>${escapeHtml(message.subject || "No subject")}</strong>
+      <span>${escapeHtml(senderLabel(message))} / ${formatTime(message.received_at)}</span>
+    </div>
+    <div class="reader-summary">
+      <small>Analyzer</small>
+      <p>${escapeHtml(analysis.summary || message.ai_summary || "No AI summary yet. Read the original content below.")}</p>
+    </div>
+    <div class="reader-source-head">
+      <small>Original message</small>
+      <div class="source-tabs" role="tablist" aria-label="Original message tabs">
+        ${sourceTabs}
+      </div>
+    </div>
+    ${sourceBody}
+  `;
+  mountHtmlPreview(widgetEl.messageReader, message);
+}
+
 function renderCodes() {
   const messagesWithCodes = widgetState.messages.filter((message) => message.otp_code).slice(0, 5);
   if (!messagesWithCodes.length) {
     widgetEl.codeList.className = "code-list empty";
     widgetEl.codeList.innerHTML = "<p>Waiting for verification codes. New OTPs appear automatically.</p>";
+    if (!widgetState.messages.length) {
+      widgetState.selectedMessageId = null;
+      widgetState.selectedMessage = null;
+      renderMessageReader();
+    }
     return;
   }
 
@@ -283,14 +434,25 @@ function renderCodes() {
   widgetEl.codeList.innerHTML = messagesWithCodes
     .map((message) => {
       const isNew = Number(message.id) > widgetState.lastSeenMessageId ? " is-new" : "";
+      const isSelected = Number(message.id) === Number(widgetState.selectedMessageId) ? " is-selected" : "";
       return `
-        <button class="code-card${isNew}" type="button" data-copy-code="${escapeHtml(message.otp_code)}" aria-label="Copy code ${escapeHtml(message.otp_code)}">
-          <span class="code-meta">
-            <strong>${escapeHtml(message.subject || "Verification code")}</strong>
-            <small>${escapeHtml(senderLabel(message))} / ${formatTime(message.received_at)}</small>
-          </span>
-          <span class="code-value">${escapeHtml(message.otp_code)}</span>
-        </button>
+        <article class="code-card${isNew}${isSelected}">
+          <button
+            class="code-open"
+            type="button"
+            data-open-message="${message.id}"
+            aria-label="Open original message ${escapeHtml(message.subject || "Verification code")}"
+          >
+            <span class="code-meta">
+              <strong>${escapeHtml(message.subject || "Verification code")}</strong>
+              <small>${escapeHtml(senderLabel(message))} / ${formatTime(message.received_at)}</small>
+            </span>
+            <span class="code-open-hint">Open mail</span>
+          </button>
+          <button class="code-copy-button" type="button" data-copy-code="${escapeHtml(message.otp_code)}" aria-label="Copy code ${escapeHtml(message.otp_code)}">
+            ${escapeHtml(message.otp_code)}
+          </button>
+        </article>
       `;
     })
     .join("");
@@ -333,6 +495,23 @@ async function loadInbox({ quiet = false } = {}) {
   }
   rememberSeenMessages();
   widgetEl.pollIndicator.textContent = "live";
+}
+
+async function selectMessage(messageId) {
+  widgetState.selectedMessageId = messageId;
+  renderCodes();
+  setWidgetStatus("Opening original email...");
+  const message = await api(`/messages/${messageId}`);
+  renderMessageReader(message);
+  setWidgetStatus(`Opened ${message.subject || "message"}.`);
+}
+
+async function refreshSelectedMessageDetail() {
+  if (!widgetState.selectedMessageId) {
+    return;
+  }
+  const message = await api(`/messages/${widgetState.selectedMessageId}`);
+  renderMessageReader(message);
 }
 
 async function createMailbox(event) {
@@ -392,6 +571,7 @@ function startPolling() {
     loadInbox({ quiet: true }).catch(() => {
       widgetEl.pollIndicator.textContent = "offline";
     });
+    refreshSelectedMessageDetail().catch(() => undefined);
   }, 5_000);
 }
 
@@ -401,6 +581,7 @@ async function bootWidget() {
   renderTurnstile();
   await loadMailboxes();
   await loadInbox({ quiet: true });
+  renderMessageReader();
   setWidgetStatus(widgetState.sessionToken ? "Live. Waiting for codes." : "Generate a mailbox to start.");
   startPolling();
 }
@@ -432,10 +613,24 @@ widgetEl.addressCard.addEventListener("click", () => {
 });
 widgetEl.codeList.addEventListener("click", (event) => {
   const codeButton = event.target.closest("[data-copy-code]");
-  if (!codeButton) {
+  if (codeButton) {
+    copyCode(codeButton.dataset.copyCode).catch((error) => setWidgetStatus(error.message, "error"));
     return;
   }
-  copyCode(codeButton.dataset.copyCode).catch((error) => setWidgetStatus(error.message, "error"));
+
+  const openButton = event.target.closest("[data-open-message]");
+  if (!openButton) {
+    return;
+  }
+  selectMessage(Number(openButton.dataset.openMessage)).catch((error) => setWidgetStatus(error.message, "error"));
+});
+widgetEl.messageReader.addEventListener("click", (event) => {
+  const sourceTab = event.target.closest("[data-source-tab]");
+  if (!sourceTab || !widgetState.selectedMessage) {
+    return;
+  }
+  widgetState.selectedSourceTab = sourceTab.dataset.sourceTab || "text";
+  renderMessageReader(widgetState.selectedMessage);
 });
 document.addEventListener("click", (event) => {
   if (!widgetEl.domainPicker.contains(event.target)) {

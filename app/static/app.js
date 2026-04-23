@@ -6,6 +6,8 @@ const state = {
   mailboxes: [],
   messages: [],
   selectedMessageId: null,
+  selectedMessage: null,
+  selectedSourceTab: "text",
 };
 
 const el = {
@@ -129,6 +131,134 @@ function describeSender(message, analysis) {
     name: domain || fromAddress || "Unknown sender",
     detail: domain && fromAddress ? fromAddress : "",
   };
+}
+
+function formatRawPayload(rawValue) {
+  const raw = String(rawValue || "").trim();
+  if (!raw) {
+    return "";
+  }
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
+}
+
+function getSourceTabs(message) {
+  const tabs = [];
+  if (String(message?.body_text || "").trim()) {
+    tabs.push("text");
+  }
+  if (String(message?.body_html || "").trim()) {
+    tabs.push("html");
+  }
+  if (String(message?.raw_payload_json || "").trim()) {
+    tabs.push("raw");
+  }
+  return tabs.length ? tabs : ["text"];
+}
+
+function sourceTabLabel(tab) {
+  if (tab === "html") {
+    return "HTML";
+  }
+  if (tab === "raw") {
+    return "Raw JSON";
+  }
+  return "Text";
+}
+
+function resolveSourceTab(message) {
+  const tabs = getSourceTabs(message);
+  return tabs.includes(state.selectedSourceTab) ? state.selectedSourceTab : tabs[0];
+}
+
+function renderSourceViewer(message) {
+  const tabs = getSourceTabs(message);
+  const activeTab = resolveSourceTab(message);
+  state.selectedSourceTab = activeTab;
+
+  const tabButtons = tabs
+    .map(
+      (tab) => `
+        <button
+          class="source-tab${tab === activeTab ? " is-active" : ""}"
+          type="button"
+          role="tab"
+          aria-selected="${tab === activeTab ? "true" : "false"}"
+          data-source-tab="${tab}"
+        >
+          ${sourceTabLabel(tab)}
+        </button>
+      `,
+    )
+    .join("");
+
+  let panelHtml = '<div class="detail-empty">Original content is missing for this message.</div>';
+  if (activeTab === "html" && String(message.body_html || "").trim()) {
+    panelHtml = `
+      <div class="source-preview">
+        <div class="source-preview-frame">
+          <iframe class="source-frame" title="HTML email preview" sandbox data-html-preview></iframe>
+        </div>
+        <pre class="detail-pre detail-pre--html">${escapeHtml(message.body_html)}</pre>
+      </div>
+    `;
+  } else if (activeTab === "raw" && String(message.raw_payload_json || "").trim()) {
+    panelHtml = `<pre class="detail-pre detail-pre--raw">${escapeHtml(formatRawPayload(message.raw_payload_json))}</pre>`;
+  } else if (String(message.body_text || "").trim()) {
+    panelHtml = `<pre class="detail-pre">${escapeHtml(message.body_text)}</pre>`;
+  }
+
+  return `
+    <div class="detail-box detail-box--source">
+      <div class="detail-source-header">
+        <small>Original message</small>
+        <div class="source-tabs" role="tablist" aria-label="Original message tabs">
+          ${tabButtons}
+        </div>
+      </div>
+      ${panelHtml}
+    </div>
+  `;
+}
+
+function mountHtmlPreview(root, message) {
+  const frame = root.querySelector("[data-html-preview]");
+  if (!frame) {
+    return;
+  }
+
+  const html = String(message?.body_html || "").trim();
+  if (!html) {
+    frame.srcdoc = "<body></body>";
+    return;
+  }
+
+  frame.srcdoc = `
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <style>
+          :root { color-scheme: light; }
+          body {
+            margin: 0;
+            padding: 16px;
+            color: #192331;
+            font: 15px/1.45 "Segoe UI", Arial, sans-serif;
+            background: #fffdf7;
+            overflow-wrap: anywhere;
+          }
+          img, table { max-width: 100%; }
+          pre { white-space: pre-wrap; }
+          a { color: #9d2b18; }
+        </style>
+      </head>
+      <body>${html}</body>
+    </html>
+  `;
 }
 
 async function writeClipboard(value) {
@@ -267,7 +397,15 @@ function renderMailboxes() {
 
 function renderMessages({ updateStatus = true } = {}) {
   if (!state.messages.length) {
+    state.selectedMessageId = null;
+    state.selectedMessage = null;
+    el.analyze.disabled = true;
     el.messageList.innerHTML = "";
+    el.messageDetail.className = "message-detail empty";
+    el.messageDetail.innerHTML = `
+      <span class="empty-mark">No message selected</span>
+      <p>Select a message to see the clean code, sender, summary, and the original email content.</p>
+    `;
     if (updateStatus) {
       setStatus(state.sessionToken ? "No mail yet. Send a code to the address above." : "Create a mailbox to begin.");
     }
@@ -306,6 +444,7 @@ function renderMessages({ updateStatus = true } = {}) {
 }
 
 function renderDetail(message) {
+  state.selectedMessage = message;
   const analysis = message.analysis || {};
   const code = analysis.otp_code || message.otp_code || "";
   const links = uniqueLinks(analysis.action_links || []).slice(0, 4);
@@ -368,7 +507,9 @@ function renderDetail(message) {
       <small>Action links</small>
       ${linkHtml}
     </div>
+    ${renderSourceViewer(message)}
   `;
+  mountHtmlPreview(el.messageDetail, message);
 }
 
 async function loadMailboxes() {
@@ -553,6 +694,13 @@ el.messageList.addEventListener("keydown", (event) => {
   selectMessage(Number(card.dataset.messageId)).catch((error) => setStatus(error.message, "error"));
 });
 el.messageDetail.addEventListener("click", (event) => {
+  const sourceTab = event.target.closest("[data-source-tab]");
+  if (sourceTab && state.selectedMessage) {
+    state.selectedSourceTab = sourceTab.dataset.sourceTab || "text";
+    renderDetail(state.selectedMessage);
+    return;
+  }
+
   const copyButton = event.target.closest("[data-copy-code]");
   if (!copyButton) {
     return;
