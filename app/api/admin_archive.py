@@ -5,7 +5,7 @@ import secrets
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 
-from app.api.tempmail import _serialize_analysis, _serialize_message_summary, get_message_repository
+from app.api.tempmail import _serialize_message_detail, _serialize_message_summary, get_message_repository
 from app.repositories.messages import MessageRepository
 from app.schemas.tempmail import MessageDetailResponse, MessageSummaryResponse
 
@@ -59,13 +59,4 @@ def get_admin_archive_message(
     if message is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="message not found")
 
-    return MessageDetailResponse(
-        **_serialize_message_summary(message).model_dump(),
-        source_provider=str(message["source_provider"]),
-        provider_message_id=str(message["provider_message_id"]) if message.get("provider_message_id") is not None else None,
-        internet_message_id=str(message["internet_message_id"]) if message.get("internet_message_id") is not None else None,
-        body_text=str(message["body_text"]) if message.get("body_text") is not None else None,
-        body_html=str(message["body_html"]) if message.get("body_html") is not None else None,
-        raw_payload_json=str(message["raw_payload_json"]) if message.get("raw_payload_json") is not None else None,
-        analysis=_serialize_analysis(message),
-    )
+    return _serialize_message_detail(message)

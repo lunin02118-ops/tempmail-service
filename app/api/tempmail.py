@@ -25,6 +25,7 @@ from app.schemas.tempmail import (
 from app.services.ai_service import MessageAnalysisService
 from app.services.mailbox_service import MailboxService
 from app.services.session_service import SESSION_COOKIE_NAME, generate_session_token, hash_session_token
+from app.services.text_encoding import repair_mojibake
 
 
 router = APIRouter(tags=["tempmail"])
@@ -88,6 +89,10 @@ def _serialize_mailbox(mailbox: dict[str, object]) -> MailboxResponse:
     )
 
 
+def _clean_optional_text(value: object) -> str | None:
+    return repair_mojibake(str(value)) if value is not None else None
+
+
 def _serialize_message_summary(message: dict[str, object]) -> MessageSummaryResponse:
     return MessageSummaryResponse(
         id=int(message["id"]),
@@ -95,16 +100,16 @@ def _serialize_message_summary(message: dict[str, object]) -> MessageSummaryResp
         mailbox_address=str(message["mailbox_address"]),
         mailbox_local_part=str(message["mailbox_local_part"]) if message.get("mailbox_local_part") is not None else None,
         mailbox_domain=str(message["mailbox_domain"]) if message.get("mailbox_domain") is not None else None,
-        from_address=str(message["from_address"]) if message.get("from_address") is not None else None,
-        to_address=str(message["to_address"]) if message.get("to_address") is not None else None,
-        subject=str(message["subject"]) if message.get("subject") is not None else None,
+        from_address=_clean_optional_text(message.get("from_address")),
+        to_address=_clean_optional_text(message.get("to_address")),
+        subject=_clean_optional_text(message.get("subject")),
         received_at=message["received_at"],
         has_attachments=bool(message["has_attachments"]),
         is_unread=bool(message["is_unread"]),
-        ai_summary=str(message["ai_summary"]) if message.get("ai_summary") is not None else None,
+        ai_summary=_clean_optional_text(message.get("ai_summary")),
         otp_code=str(message["otp_code"]) if message.get("otp_code") is not None else None,
-        action_required=str(message["action_required"]) if message.get("action_required") is not None else None,
-        sender_brand=str(message["sender_brand"]) if message.get("sender_brand") is not None else None,
+        action_required=_clean_optional_text(message.get("action_required")),
+        sender_brand=_clean_optional_text(message.get("sender_brand")),
         ai_status=str(message["ai_status"]) if message.get("ai_status") is not None else None,
     )
 
@@ -122,6 +127,19 @@ def _serialize_analysis(message: dict[str, object]) -> AIExtractionResponse:
         sender_brand=str(message["sender_brand"]) if message.get("sender_brand") is not None else None,
         confidence=str(message["ai_confidence"]) if message.get("ai_confidence") is not None else None,
         error_text=str(message["ai_error_text"]) if message.get("ai_error_text") is not None else None,
+    )
+
+
+def _serialize_message_detail(message: dict[str, object]) -> MessageDetailResponse:
+    return MessageDetailResponse(
+        **_serialize_message_summary(message).model_dump(),
+        source_provider=str(message["source_provider"]),
+        provider_message_id=_clean_optional_text(message.get("provider_message_id")),
+        internet_message_id=_clean_optional_text(message.get("internet_message_id")),
+        body_text=_clean_optional_text(message.get("body_text")),
+        body_html=_clean_optional_text(message.get("body_html")),
+        raw_payload_json=str(message["raw_payload_json"]) if message.get("raw_payload_json") is not None else None,
+        analysis=_serialize_analysis(message),
     )
 
 
@@ -302,16 +320,7 @@ def get_message_detail(
     if message is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="message not found")
 
-    return MessageDetailResponse(
-        **_serialize_message_summary(message).model_dump(),
-        source_provider=str(message["source_provider"]),
-        provider_message_id=str(message["provider_message_id"]) if message.get("provider_message_id") is not None else None,
-        internet_message_id=str(message["internet_message_id"]) if message.get("internet_message_id") is not None else None,
-        body_text=str(message["body_text"]) if message.get("body_text") is not None else None,
-        body_html=str(message["body_html"]) if message.get("body_html") is not None else None,
-        raw_payload_json=str(message["raw_payload_json"]) if message.get("raw_payload_json") is not None else None,
-        analysis=_serialize_analysis(message),
-    )
+    return _serialize_message_detail(message)
 
 
 @router.post("/messages/{message_id}/analyze", response_model=MessageAnalyzeResponse)
@@ -386,12 +395,12 @@ async def ingest_message(
         source_provider=request.source_provider,
         provider_message_id=request.provider_message_id,
         internet_message_id=request.internet_message_id,
-        from_address=request.from_address,
+        from_address=repair_mojibake(request.from_address),
         to_address=request.to_address,
-        subject=request.subject,
+        subject=repair_mojibake(request.subject),
         received_at=request.received_at,
-        body_text=request.body_text,
-        body_html=request.body_html,
+        body_text=repair_mojibake(request.body_text),
+        body_html=repair_mojibake(request.body_html),
         raw_payload_json=json.dumps(request.raw_payload) if request.raw_payload is not None else None,
         has_attachments=request.has_attachments,
     )

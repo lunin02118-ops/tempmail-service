@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.config import AppSettings
 from app.main import create_app
+from app.repositories.messages import MessageRepository
 from app.services.ai_service import MessageAnalysisService
 
 
@@ -20,6 +21,10 @@ def setup_tempmail_env(tmp_path, monkeypatch):
     monkeypatch.delenv("ARCHIVE_ADMIN_TOKEN", raising=False)
     for index in range(1, 10):
         monkeypatch.delenv(f"GROQ_API_KEY_{index}", raising=False)
+
+
+def _as_latin1_mojibake(value: str) -> str:
+    return value.encode("utf-8").decode("latin1")
 
 
 def test_create_mailbox_sets_session_and_lists_mailboxes(tmp_path, monkeypatch):
@@ -257,6 +262,76 @@ def test_admin_archive_is_token_protected_and_lists_all_sessions(tmp_path, monke
     assert detail_payload["mailbox_address"] == second_mailbox["address"]
     assert detail_payload["body_text"] == "Your OpenAI verification code is 333444."
     assert detail_payload["raw_payload_json"] == '{"source": "test"}'
+
+
+def test_message_detail_repairs_stored_utf8_latin1_mojibake(tmp_path, monkeypatch):
+    setup_tempmail_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("ARCHIVE_ADMIN_TOKEN", "archive-secret")
+    client = TestClient(create_app())
+
+    mailbox = client.post("/mailboxes", json={"requested_local_part": "mojibake"}).json()["mailbox"]
+    settings = AppSettings.from_env()
+    message_repo = MessageRepository(settings)
+    body_text = "Ваш временный код подтверждения 123456"
+    body_html = "<div>Инвойс дата: 22 апр., 20:19</div>"
+    message_id = message_repo.create_ingested_message(
+        mailbox_id=mailbox["id"],
+        source_provider="legacy",
+        provider_message_id="legacy-mojibake",
+        internet_message_id=None,
+        from_address="billing@example.com",
+        to_address=mailbox["address"],
+        subject="ChatGPT — ваш новый план",
+        received_at=None,
+        body_text=_as_latin1_mojibake(body_text),
+        body_html=_as_latin1_mojibake(body_html),
+        raw_payload_json=None,
+    )
+
+    detail_response = client.get(f"/messages/{message_id}")
+    admin_detail_response = client.get(
+        f"/admin/archive/messages/{message_id}",
+        headers={"X-Archive-Admin-Token": "archive-secret"},
+    )
+
+    assert detail_response.status_code == 200
+    assert admin_detail_response.status_code == 200
+    assert detail_response.json()["body_text"] == body_text
+    assert detail_response.json()["body_html"] == body_html
+    assert admin_detail_response.json()["body_html"] == body_html
+
+
+def test_ingest_normalizes_utf8_latin1_mojibake_before_analysis(tmp_path, monkeypatch):
+    setup_tempmail_env(tmp_path, monkeypatch)
+    client = TestClient(create_app())
+
+    mailbox = client.post("/mailboxes", json={}).json()["mailbox"]
+    body_text = "Ваш временный код подтверждения 123456"
+    body_html = "<p>Инвойс дата: Apr 22, 2026</p>"
+
+    ingest_response = client.post(
+        "/ingest/messages",
+        headers={"X-Ingest-Webhook-Secret": "test-ingest-secret"},
+        json={
+            "to_address": mailbox["address"],
+            "from_address": "ChatGPT <billing@example.com>",
+            "subject": _as_latin1_mojibake("Ваш временный код"),
+            "provider_message_id": "provider-mojibake",
+            "body_text": _as_latin1_mojibake(body_text),
+            "body_html": _as_latin1_mojibake(body_html),
+        },
+    )
+
+    assert ingest_response.status_code == 200
+    assert ingest_response.json()["notification"]["otp_code"] == "123456"
+
+    message_id = ingest_response.json()["message_id"]
+    detail_response = client.get(f"/messages/{message_id}")
+
+    assert detail_response.status_code == 200
+    detail_payload = detail_response.json()
+    assert detail_payload["body_text"] == body_text
+    assert detail_payload["body_html"] == body_html
 
 
 def test_admin_archive_is_not_available_without_configured_token(tmp_path, monkeypatch):

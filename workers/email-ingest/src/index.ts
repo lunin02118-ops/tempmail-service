@@ -147,10 +147,24 @@ function getMimeBody(part: string): string {
   return part.slice(split).replace(HEADER_BODY_SPLIT_RE, "");
 }
 
+function decodeBinaryStringAsUtf8(value: string): string {
+  const bytes = new Uint8Array(value.length);
+  for (let index = 0; index < value.length; index += 1) {
+    bytes[index] = value.charCodeAt(index) & 0xff;
+  }
+
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return value;
+  }
+}
+
 function decodeQuotedPrintable(value: string): string {
-  return value
+  const binary = value
     .replace(/=\r?\n/g, "")
     .replace(/=([0-9A-F]{2})/gi, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)));
+  return decodeBinaryStringAsUtf8(binary);
 }
 
 function maybeDecodeBase64(value: string): string {
@@ -160,7 +174,7 @@ function maybeDecodeBase64(value: string): string {
   }
 
   try {
-    return atob(compact);
+    return decodeBinaryStringAsUtf8(atob(compact));
   } catch {
     return value;
   }
