@@ -465,13 +465,12 @@ function renderCodes() {
               <strong>${escapeHtml(message.subject || "Verification code")}</strong>
               <small>${escapeHtml(senderLabel(message))} / ${formatTime(message.received_at)}</small>
             </span>
-            <span class="code-open-hint">Open mail</span>
+            <span class="code-open-hint">Open below</span>
           </button>
           <button
             class="code-copy-button"
             type="button"
             data-copy-code="${escapeHtml(message.otp_code)}"
-            data-open-message="${message.id}"
             aria-label="Copy code ${escapeHtml(message.otp_code)}"
           >
             ${escapeHtml(message.otp_code)}
@@ -646,9 +645,7 @@ widgetEl.addressCard.addEventListener("click", () => {
 widgetEl.codeList.addEventListener("click", (event) => {
   const codeButton = event.target.closest("[data-copy-code]");
   if (codeButton) {
-    selectMessage(Number(codeButton.dataset.openMessage), { quiet: true })
-      .then(() => copyCode(codeButton.dataset.copyCode))
-      .catch((error) => setWidgetStatus(error.message, "error"));
+    copyCode(codeButton.dataset.copyCode).catch((error) => setWidgetStatus(error.message, "error"));
     return;
   }
 
