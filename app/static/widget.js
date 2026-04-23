@@ -36,6 +36,8 @@ const widgetEl = {
   status: document.querySelector("#status"),
   refresh: document.querySelector("#refresh"),
   codeList: document.querySelector("#code-list"),
+  archiveCount: document.querySelector("#archive-count"),
+  archiveList: document.querySelector("#archive-list"),
   messageReader: document.querySelector("#message-reader"),
   pollIndicator: document.querySelector("#poll-indicator"),
   fullLink: document.querySelector(".full-link"),
@@ -373,7 +375,7 @@ function renderAddress() {
 function renderMessageReader(message = widgetState.selectedMessage) {
   if (!message) {
     widgetEl.messageReader.className = "message-reader empty";
-    widgetEl.messageReader.innerHTML = "<p>Pick a code card to inspect the original message text, HTML, and raw payload.</p>";
+    widgetEl.messageReader.innerHTML = "<p>Pick a message from the archive to inspect the original text, HTML, and raw payload.</p>";
     return;
   }
 
@@ -481,6 +483,54 @@ function renderCodes() {
     .join("");
 }
 
+function renderArchive() {
+  widgetEl.archiveCount.textContent = String(widgetState.messages.length);
+
+  if (!widgetState.messages.length) {
+    widgetEl.archiveList.className = "archive-list empty";
+    widgetEl.archiveList.innerHTML = "<p>Every received email for this session will appear here.</p>";
+    return;
+  }
+
+  widgetEl.archiveList.className = "archive-list";
+  widgetEl.archiveList.innerHTML = widgetState.messages
+    .map((message) => {
+      const isSelected = Number(message.id) === Number(widgetState.selectedMessageId) ? " is-selected" : "";
+      const unread = message.is_unread ? '<span class="archive-unread" aria-label="Unread"></span>' : "";
+      const code = message.otp_code
+        ? `
+          <button
+            class="archive-code"
+            type="button"
+            data-copy-code="${escapeHtml(message.otp_code)}"
+            aria-label="Copy code ${escapeHtml(message.otp_code)}"
+          >
+            ${escapeHtml(message.otp_code)}
+          </button>
+        `
+        : '<span class="archive-tag">no code</span>';
+      return `
+        <article class="archive-card${isSelected}">
+          <button
+            class="archive-open"
+            type="button"
+            data-open-message="${message.id}"
+            aria-label="Open archived email ${escapeHtml(message.subject || "No subject")}"
+          >
+            <span class="archive-title-row">
+              <strong>${escapeHtml(message.subject || "No subject")}</strong>
+              ${unread}
+            </span>
+            <small>${escapeHtml(senderLabel(message))} / ${formatTime(message.received_at)}</small>
+            <span>${escapeHtml(message.mailbox_address || "")}</span>
+          </button>
+          ${code}
+        </article>
+      `;
+    })
+    .join("");
+}
+
 function rememberSeenMessages() {
   const latestId = widgetState.messages.reduce((maxId, message) => Math.max(maxId, Number(message.id) || 0), widgetState.lastSeenMessageId);
   widgetState.lastSeenMessageId = latestId;
@@ -503,6 +553,7 @@ async function loadInbox({ quiet = false } = {}) {
   if (!widgetState.sessionToken) {
     widgetState.messages = [];
     renderCodes();
+    renderArchive();
     widgetEl.pollIndicator.textContent = "idle";
     return;
   }
@@ -511,6 +562,7 @@ async function loadInbox({ quiet = false } = {}) {
   const previousSeen = widgetState.lastSeenMessageId;
   widgetState.messages = await api("/inbox");
   renderCodes();
+  renderArchive();
   const newestCode = widgetState.messages.find((message) => message.otp_code && Number(message.id) > previousSeen);
   if (newestCode) {
     document.title = `${newestCode.otp_code} · SamGPT Desk Widget`;
@@ -525,6 +577,7 @@ async function loadInbox({ quiet = false } = {}) {
 async function selectMessage(messageId, { quiet = false } = {}) {
   widgetState.selectedMessageId = messageId;
   renderCodes();
+  renderArchive();
   if (!quiet) {
     setWidgetStatus("Opening original email...");
   }
@@ -643,6 +696,19 @@ widgetEl.addressCard.addEventListener("click", () => {
   }
 });
 widgetEl.codeList.addEventListener("click", (event) => {
+  const codeButton = event.target.closest("[data-copy-code]");
+  if (codeButton) {
+    copyCode(codeButton.dataset.copyCode).catch((error) => setWidgetStatus(error.message, "error"));
+    return;
+  }
+
+  const openButton = event.target.closest("[data-open-message]");
+  if (!openButton) {
+    return;
+  }
+  selectMessage(Number(openButton.dataset.openMessage)).catch((error) => setWidgetStatus(error.message, "error"));
+});
+widgetEl.archiveList.addEventListener("click", (event) => {
   const codeButton = event.target.closest("[data-copy-code]");
   if (codeButton) {
     copyCode(codeButton.dataset.copyCode).catch((error) => setWidgetStatus(error.message, "error"));

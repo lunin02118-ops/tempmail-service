@@ -433,7 +433,7 @@ function renderMessages({ updateStatus = true } = {}) {
   }
 
   if (updateStatus) {
-    setStatus(`${state.messages.length} message${state.messages.length === 1 ? "" : "s"} in this session.`);
+    setStatus(`${state.messages.length} archived message${state.messages.length === 1 ? "" : "s"} in this session.`);
   }
   el.messageList.innerHTML = state.messages
     .map((message) => {
