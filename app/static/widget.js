@@ -13,7 +13,7 @@ const widgetState = {
   turnstileWidgetId: null,
   selectedDomain: "",
   mailboxes: [],
-  messages: [],
+  latestNotification: null,
   lastSeenMessageId: Number(localStorage.getItem("tempmail.widget.lastSeenMessageId") || "0"),
   pollTimer: null,
 };
@@ -308,8 +308,8 @@ function renderAddress() {
 }
 
 function renderLatestCode() {
-  const latestCode = widgetState.messages.find((message) => message.otp_code) || null;
-  if (!latestCode) {
+  const latestCode = widgetState.latestNotification;
+  if (!latestCode?.otp_code) {
     widgetEl.latestCodeCard.className = "signal-card is-empty";
     widgetEl.latestCodeCard.disabled = true;
     widgetEl.latestCodeCard.removeAttribute("data-copy-latest-code");
@@ -322,11 +322,11 @@ function renderLatestCode() {
   widgetEl.latestCodeCard.disabled = false;
   widgetEl.latestCodeCard.dataset.copyLatestCode = latestCode.otp_code;
   widgetEl.latestCodeValue.textContent = latestCode.otp_code;
-  widgetEl.latestCodeMeta.textContent = `${senderLabel(latestCode)} / ${formatTime(latestCode.received_at)}`;
+  widgetEl.latestCodeMeta.textContent = senderLabel(latestCode);
 }
 
 function rememberSeenMessages() {
-  const latestId = widgetState.messages.reduce((maxId, message) => Math.max(maxId, Number(message.id) || 0), widgetState.lastSeenMessageId);
+  const latestId = Math.max(widgetState.lastSeenMessageId, Number(widgetState.latestNotification?.message_id) || 0);
   widgetState.lastSeenMessageId = latestId;
   localStorage.setItem("tempmail.widget.lastSeenMessageId", String(latestId));
 }
@@ -341,22 +341,25 @@ async function loadMailboxes() {
   renderAddress();
 }
 
-async function loadInbox({ quiet = false } = {}) {
+async function loadLatestCode({ quiet = false } = {}) {
   if (!widgetState.sessionToken) {
-    widgetState.messages = [];
+    widgetState.latestNotification = null;
     renderLatestCode();
     return;
   }
 
   const previousSeen = widgetState.lastSeenMessageId;
-  widgetState.messages = await api("/inbox");
+  widgetState.latestNotification = await api("/notifications/latest");
   renderLatestCode();
-  const newestCode = widgetState.messages.find((message) => message.otp_code && Number(message.id) > previousSeen);
+  const newestCode =
+    widgetState.latestNotification?.otp_code && Number(widgetState.latestNotification.message_id) > previousSeen
+      ? widgetState.latestNotification
+      : null;
   if (newestCode) {
     document.title = `${newestCode.otp_code} · DeskMail Widget`;
     setWidgetStatus(`New code: ${newestCode.otp_code}`, "success");
   } else if (!quiet) {
-    setWidgetStatus(widgetState.messages.length ? "Synced." : "Waiting for code.");
+    setWidgetStatus(widgetState.latestNotification ? "Synced." : "Waiting for code.");
   }
   rememberSeenMessages();
 }
@@ -392,7 +395,7 @@ async function createMailbox(event) {
     localStorage.setItem("tempmail.sessionToken", payload.session_token);
     setWidgetStatus("Generated.", "success");
     await loadMailboxes();
-    await loadInbox({ quiet: true });
+    await loadLatestCode({ quiet: true });
   } catch (error) {
     setWidgetStatus(error.message, "error");
   } finally {
@@ -416,8 +419,8 @@ function startPolling() {
     clearInterval(widgetState.pollTimer);
   }
   widgetState.pollTimer = setInterval(() => {
-    loadInbox({ quiet: true }).catch(() => setWidgetStatus("Offline.", "error"));
-  }, 5_000);
+    loadLatestCode({ quiet: true }).catch(() => setWidgetStatus("Offline.", "error"));
+  }, 12_000);
 }
 
 async function bootWidget() {
@@ -425,7 +428,7 @@ async function bootWidget() {
   renderDomainOptions();
   hideTurnstile();
   await loadMailboxes();
-  await loadInbox({ quiet: true });
+  await loadLatestCode({ quiet: true });
   setWidgetStatus(widgetState.sessionToken ? "Listening." : "Ready.");
   startPolling();
 }

@@ -12,6 +12,18 @@ class MessageRepository:
     def __init__(self, settings: AppSettings) -> None:
         self._engine = get_engine(settings.database_url)
 
+    def _message_summary_columns(self) -> tuple:
+        return (
+            messages_table.c.id,
+            messages_table.c.mailbox_id,
+            messages_table.c.from_address,
+            messages_table.c.to_address,
+            messages_table.c.subject,
+            messages_table.c.received_at,
+            messages_table.c.has_attachments,
+            messages_table.c.is_unread,
+        )
+
     def _normalize_received_at(self, received_at: datetime | None) -> datetime:
         if received_at is None:
             return datetime.now(UTC).replace(tzinfo=None)
@@ -77,7 +89,7 @@ class MessageRepository:
 
         query = (
             select(
-                messages_table,
+                *self._message_summary_columns(),
                 mailboxes_table.c.address.label("mailbox_address"),
                 mailboxes_table.c.local_part.label("mailbox_local_part"),
                 mailboxes_table.c.domain.label("mailbox_domain"),
@@ -97,13 +109,44 @@ class MessageRepository:
             rows = conn.execute(query).mappings().all()
             return [dict(row) for row in rows]
 
+    def get_latest_code_for_session(self, session_token_hash: str) -> dict[str, object] | None:
+        mailbox_join = join(messages_table, mailboxes_table, messages_table.c.mailbox_id == mailboxes_table.c.id)
+        extraction_join = outerjoin(mailbox_join, ai_extractions_table, ai_extractions_table.c.message_id == messages_table.c.id)
+
+        query = (
+            select(
+                *self._message_summary_columns(),
+                mailboxes_table.c.address.label("mailbox_address"),
+                mailboxes_table.c.local_part.label("mailbox_local_part"),
+                mailboxes_table.c.domain.label("mailbox_domain"),
+                ai_extractions_table.c.summary.label("ai_summary"),
+                ai_extractions_table.c.otp_code.label("otp_code"),
+                ai_extractions_table.c.action_required.label("action_required"),
+                ai_extractions_table.c.sender_brand.label("sender_brand"),
+                ai_extractions_table.c.status.label("ai_status"),
+            )
+            .select_from(extraction_join)
+            .where(mailboxes_table.c.session_token_hash == session_token_hash)
+            .where(mailboxes_table.c.is_active == 1)
+            .where(ai_extractions_table.c.otp_code.is_not(None))
+            .where(ai_extractions_table.c.otp_code != "")
+            .order_by(messages_table.c.received_at.desc(), messages_table.c.id.desc())
+            .limit(1)
+        )
+
+        with self._engine.connect() as conn:
+            row = conn.execute(query).mappings().first()
+            return None if row is None else dict(row)
+
     def list_for_mailbox(self, mailbox_id: int, session_token_hash: str) -> list[dict[str, object]]:
         mailbox_join = join(messages_table, mailboxes_table, messages_table.c.mailbox_id == mailboxes_table.c.id)
         extraction_join = outerjoin(mailbox_join, ai_extractions_table, ai_extractions_table.c.message_id == messages_table.c.id)
         query = (
             select(
-                messages_table,
+                *self._message_summary_columns(),
                 mailboxes_table.c.address.label("mailbox_address"),
+                mailboxes_table.c.local_part.label("mailbox_local_part"),
+                mailboxes_table.c.domain.label("mailbox_domain"),
                 ai_extractions_table.c.summary.label("ai_summary"),
                 ai_extractions_table.c.otp_code.label("otp_code"),
                 ai_extractions_table.c.action_required.label("action_required"),
@@ -125,7 +168,7 @@ class MessageRepository:
         extraction_join = outerjoin(mailbox_join, ai_extractions_table, ai_extractions_table.c.message_id == messages_table.c.id)
         query = (
             select(
-                messages_table,
+                *self._message_summary_columns(),
                 mailboxes_table.c.address.label("mailbox_address"),
                 mailboxes_table.c.local_part.label("mailbox_local_part"),
                 mailboxes_table.c.domain.label("mailbox_domain"),
@@ -235,8 +278,7 @@ class MessageRepository:
             row = conn.execute(query).mappings().first()
             return None if row is None else dict(row)
 
-    def build_notification_payload(self, message_id: int, session_token_hash: str) -> dict[str, object] | None:
-        message = self.get_for_session(message_id, session_token_hash, mark_as_read=False)
+    def _build_notification_from_message(self, message: dict[str, object] | None) -> dict[str, object] | None:
         if message is None:
             return None
 
@@ -249,3 +291,11 @@ class MessageRepository:
             "summary": summary,
             "open_path": f"/messages/{int(message['id'])}",
         }
+
+    def build_notification_payload(self, message_id: int, session_token_hash: str) -> dict[str, object] | None:
+        message = self.get_for_session(message_id, session_token_hash, mark_as_read=False)
+        return self._build_notification_from_message(message)
+
+    def build_latest_code_notification_payload(self, session_token_hash: str) -> dict[str, object] | None:
+        message = self.get_latest_code_for_session(session_token_hash)
+        return self._build_notification_from_message(message)

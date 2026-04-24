@@ -7,6 +7,7 @@ from app.config import AppSettings
 from app.main import create_app
 from app.repositories.messages import MessageRepository
 from app.services.ai_service import MessageAnalysisService
+from app.services.session_service import hash_session_token
 
 
 def setup_tempmail_env(tmp_path, monkeypatch):
@@ -112,7 +113,8 @@ def test_web_app_and_client_config_do_not_expose_private_turnstile_secret(tmp_pa
     assert "Desktop widget" in manifest_response.text
     assert "tempmail.sessionToken" in widget_script_response.text
     assert 'api("/mailboxes")' in widget_script_response.text
-    assert 'api("/inbox")' in widget_script_response.text
+    assert 'api("/notifications/latest")' in widget_script_response.text
+    assert 'api("/inbox")' not in widget_script_response.text
     assert "data-copy-latest-code" in widget_script_response.text
     assert "renderArchive" not in widget_script_response.text
     assert "renderCodes" not in widget_script_response.text
@@ -187,6 +189,8 @@ def test_ingested_message_appears_in_unified_and_mailbox_inbox(tmp_path, monkeyp
     inbox_payload = inbox_response.json()
     mailbox_history_payload = mailbox_history_response.json()
     latest_notification_payload = latest_notification_response.json()
+    session_token_hash = hash_session_token(mailbox_payload["session_token"], "test-session-secret")
+    summary_rows = MessageRepository(AppSettings.from_env()).list_for_session(session_token_hash)
 
     assert len(inbox_payload) == 1
     assert len(mailbox_history_payload) == 1
@@ -195,6 +199,47 @@ def test_ingested_message_appears_in_unified_and_mailbox_inbox(tmp_path, monkeyp
     assert inbox_payload[0]["is_unread"] is True
     assert mailbox_history_payload[0]["id"] == inbox_payload[0]["id"]
     assert latest_notification_payload["otp_code"] == "654321"
+    assert "body_text" not in summary_rows[0]
+    assert "body_html" not in summary_rows[0]
+    assert "raw_payload_json" not in summary_rows[0]
+
+
+def test_latest_notification_returns_latest_otp_without_requiring_full_inbox(tmp_path, monkeypatch):
+    setup_tempmail_env(tmp_path, monkeypatch)
+    client = TestClient(create_app())
+
+    mailbox = client.post("/mailboxes", json={}).json()["mailbox"]
+    code_response = client.post(
+        "/ingest/messages",
+        headers={"X-Ingest-Webhook-Secret": "test-ingest-secret"},
+        json={
+            "to_address": mailbox["address"],
+            "from_address": "OpenAI <noreply@openai.com>",
+            "subject": "Your login code",
+            "provider_message_id": "provider-latest-code",
+            "body_text": "Use code 654321 to continue.",
+        },
+    )
+    non_code_response = client.post(
+        "/ingest/messages",
+        headers={"X-Ingest-Webhook-Secret": "test-ingest-secret"},
+        json={
+            "to_address": mailbox["address"],
+            "from_address": "Newsletter <news@example.com>",
+            "subject": "Welcome",
+            "provider_message_id": "provider-latest-non-code",
+            "body_text": "No verification code in this message.",
+        },
+    )
+
+    latest_notification_response = client.get("/notifications/latest")
+
+    assert code_response.status_code == 200
+    assert non_code_response.status_code == 200
+    assert latest_notification_response.status_code == 200
+    latest_notification = latest_notification_response.json()
+    assert latest_notification["message_id"] == code_response.json()["message_id"]
+    assert latest_notification["otp_code"] == "654321"
 
 
 def test_admin_archive_is_token_protected_and_lists_all_sessions(tmp_path, monkeypatch):

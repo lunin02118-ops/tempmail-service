@@ -368,10 +368,7 @@ def get_latest_notification(
     session_token_hash: str = Depends(get_session_token_hash),
     repo: MessageRepository = Depends(get_message_repository),
 ) -> NotificationPayloadResponse | None:
-    messages = repo.list_for_session(session_token_hash)
-    if not messages:
-        return None
-    notification = repo.build_notification_payload(int(messages[0]["id"]), session_token_hash)
+    notification = repo.build_latest_code_notification_payload(session_token_hash)
     return _serialize_notification(notification)
 
 
