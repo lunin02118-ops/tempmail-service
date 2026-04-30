@@ -316,6 +316,10 @@ select:focus {
   color: var(--signal-dark);
 }
 
+.turnstile-slot.is-hidden {
+  display: none;
+}
+
 .primary-action,
 .ghost-action {
   border: 0;

@@ -229,6 +229,7 @@ function renderTurnstile() {
   }
 
   if (!window.turnstile) {
+    loadTurnstileApi();
     setTimeout(renderTurnstile, 250);
     return;
   }
@@ -263,6 +264,18 @@ function renderTurnstile() {
       setWidgetStatus("Human gate is blocked by the embedded browser.", "error");
     },
   });
+}
+
+function loadTurnstileApi() {
+  if (document.querySelector('script[data-turnstile-api="true"]')) {
+    return;
+  }
+  const script = document.createElement("script");
+  script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+  script.async = true;
+  script.defer = true;
+  script.dataset.turnstileApi = "true";
+  document.head.appendChild(script);
 }
 
 function hideTurnstile() {

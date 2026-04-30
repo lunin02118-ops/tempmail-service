@@ -116,6 +116,13 @@ def _split_csv_env(env_name: str) -> tuple[str, ...]:
     return tuple(values)
 
 
+def _read_bool_env(env_name: str, default: bool = False) -> bool:
+    raw = os.getenv(env_name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _normalize_domain_values(values: tuple[str, ...] | list[str]) -> tuple[str, ...]:
     normalized: list[str] = []
     seen: set[str] = set()
@@ -185,6 +192,7 @@ class AppSettings:
     ingest_webhook_secret: str | None
     turnstile_site_key: str | None
     turnstile_secret_key: str | None
+    turnstile_enabled: bool
     cloudflare_api_token: str | None
     cloudflare_account_id: str | None
     cloudflare_zone_id: str | None
@@ -251,6 +259,7 @@ class AppSettings:
             ingest_webhook_secret=os.getenv("INGEST_WEBHOOK_SECRET"),
             turnstile_site_key=os.getenv("TURNSTILE_SITE_KEY"),
             turnstile_secret_key=os.getenv("TURNSTILE_SECRET_KEY"),
+            turnstile_enabled=_read_bool_env("TURNSTILE_ENABLED", default=False),
             cloudflare_api_token=os.getenv("CLOUDFLARE_API_TOKEN"),
             cloudflare_account_id=os.getenv("CLOUDFLARE_ACCOUNT_ID"),
             cloudflare_zone_id=os.getenv("CLOUDFLARE_ZONE_ID"),

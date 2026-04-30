@@ -19,6 +19,7 @@ def setup_tempmail_env(tmp_path, monkeypatch):
     monkeypatch.setenv("INGEST_WEBHOOK_SECRET", "test-ingest-secret")
     monkeypatch.delenv("TURNSTILE_SECRET_KEY", raising=False)
     monkeypatch.delenv("TURNSTILE_SITE_KEY", raising=False)
+    monkeypatch.delenv("TURNSTILE_ENABLED", raising=False)
     monkeypatch.delenv("GROQ_API_KEYS", raising=False)
     monkeypatch.delenv("ARCHIVE_ADMIN_TOKEN", raising=False)
     for index in range(1, 10):
@@ -89,6 +90,8 @@ def test_web_app_and_client_config_do_not_expose_private_turnstile_secret(tmp_pa
     assert archive_style_response.status_code == 200
     assert manifest_response.status_code == 200
     assert worker_response.status_code == 200
+    assert "challenges.cloudflare.com/turnstile" not in index_response.text
+    assert "challenges.cloudflare.com/turnstile" not in widget_response.text
     assert "private-secret-key" not in script_response.text
     assert "private-secret-key" not in style_response.text
     assert "private-secret-key" not in widget_script_response.text
@@ -137,9 +140,22 @@ def test_web_app_and_client_config_do_not_expose_private_turnstile_secret(tmp_pa
     assert payload["mail_domains"][0] == "samgpt.me"
     assert "atlas.samgpt.me" in payload["mail_domains"]
     assert "zen.samgpt.me" in payload["mail_domains"]
-    assert payload["turnstile_site_key"] == "public-site-key"
-    assert payload["turnstile_enabled"] is True
+    assert payload["turnstile_site_key"] is None
+    assert payload["turnstile_enabled"] is False
     assert "private-secret-key" not in config_response.text
+
+
+def test_create_mailbox_does_not_require_turnstile_when_disabled(tmp_path, monkeypatch):
+    setup_tempmail_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("TURNSTILE_SITE_KEY", "public-site-key")
+    monkeypatch.setenv("TURNSTILE_SECRET_KEY", "private-secret-key")
+    monkeypatch.delenv("TURNSTILE_ENABLED", raising=False)
+    client = TestClient(create_app())
+
+    response = client.post("/mailboxes", json={"description": "no captcha"})
+
+    assert response.status_code == 201
+    assert response.json()["mailbox"]["description"] == "no captcha"
 
 
 def test_create_mailbox_accepts_generated_requested_domain(tmp_path, monkeypatch):

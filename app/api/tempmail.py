@@ -188,7 +188,7 @@ def require_ingest_secret(
 
 
 async def _verify_turnstile(turnstile_token: str | None, settings: AppSettings) -> None:
-    if not settings.turnstile_secret_key:
+    if not settings.turnstile_enabled or not settings.turnstile_secret_key:
         return
     if not turnstile_token:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="turnstile token is required")
@@ -267,7 +267,7 @@ async def create_mailbox(
     except FileExistsError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 

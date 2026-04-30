@@ -357,10 +357,11 @@ async function api(path, options = {}) {
 
 function renderTurnstile() {
   if (!state.config?.turnstile_enabled) {
-    el.turnstileSlot.classList.add("is-dev");
-    el.turnstileSlot.innerHTML = "<span>Human gate disabled in this environment.</span>";
+    hideTurnstile();
     return;
   }
+
+  el.turnstileSlot.classList.remove("is-dev", "is-hidden");
 
   if (!state.config.turnstile_site_key) {
     el.turnstileSlot.innerHTML = "<span>Turnstile site key is not configured.</span>";
@@ -368,6 +369,7 @@ function renderTurnstile() {
   }
 
   if (!window.turnstile) {
+    loadTurnstileApi();
     setTimeout(renderTurnstile, 250);
     return;
   }
@@ -388,8 +390,29 @@ function renderTurnstile() {
   });
 }
 
+function loadTurnstileApi() {
+  if (document.querySelector('script[data-turnstile-api="true"]')) {
+    return;
+  }
+  const script = document.createElement("script");
+  script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+  script.async = true;
+  script.defer = true;
+  script.dataset.turnstileApi = "true";
+  document.head.appendChild(script);
+}
+
+function hideTurnstile() {
+  state.turnstileToken = "";
+  el.turnstileSlot.classList.add("is-hidden");
+}
+
 function resetTurnstile() {
   state.turnstileToken = "";
+  if (!state.config?.turnstile_enabled) {
+    hideTurnstile();
+    return;
+  }
   if (window.turnstile && state.turnstileWidgetId !== null) {
     window.turnstile.reset(state.turnstileWidgetId);
   }

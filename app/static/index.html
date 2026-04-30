@@ -12,7 +12,6 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/static/app.css" />
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
     <script src="/static/app.js" defer></script>
   </head>
   <body>
@@ -81,7 +80,7 @@
                 <option value="1440">24 hours</option>
               </select>
             </label>
-            <div id="turnstile-slot" class="turnstile-slot" aria-live="polite">
+            <div id="turnstile-slot" class="turnstile-slot is-hidden" aria-live="polite">
               <span>Checking human gate...</span>
             </div>
             <button class="primary-action" type="submit">

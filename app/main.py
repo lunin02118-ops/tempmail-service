@@ -56,12 +56,13 @@ def create_app(telegram_client=None) -> FastAPI:
 
     @app.get("/client-config")
     def client_config() -> dict[str, object]:
+        turnstile_enabled = settings.turnstile_enabled and bool(settings.turnstile_secret_key)
         return {
             "mail_domain": settings.active_mail_domain,
             "mail_domains": list(settings.available_mail_domains),
             "mailbox_default_ttl_minutes": settings.mailbox_default_ttl_minutes,
-            "turnstile_site_key": settings.turnstile_site_key,
-            "turnstile_enabled": bool(settings.turnstile_secret_key),
+            "turnstile_site_key": settings.turnstile_site_key if turnstile_enabled else None,
+            "turnstile_enabled": turnstile_enabled,
         }
 
     @app.get("/health")

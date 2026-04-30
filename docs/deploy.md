@@ -35,11 +35,12 @@ PUBLIC_MAIL_DOMAIN=mail.example.com
 PUBLIC_MAIL_DOMAINS=mail.example.com,alt.example.com
 SESSION_SECRET=change-me
 INGEST_WEBHOOK_SECRET=change-me
-TURNSTILE_SITE_KEY=...
-TURNSTILE_SECRET_KEY=...
 GROQ_API_KEYS=key1,key2
 ARCHIVE_ADMIN_TOKEN=change-me
 ```
+
+Turnstile is disabled by default. Set `TURNSTILE_ENABLED=true` together with `TURNSTILE_SITE_KEY` and
+`TURNSTILE_SECRET_KEY` only when the human check should be active.
 
 ## Cloudflare Worker
 
