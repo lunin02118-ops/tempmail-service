@@ -562,40 +562,6 @@ h1 {
   background: rgba(255, 255, 255, 0.03);
 }
 
-.turnstile-slot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 58px;
-  padding: 10px 12px;
-  overflow: hidden;
-  border: 1px dashed rgba(171, 191, 209, 0.2);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text-muted);
-  font-size: 0.84rem;
-  text-align: center;
-}
-
-.turnstile-slot.is-hidden {
-  display: none;
-}
-
-.turnstile-slot[data-state="verified"] {
-  border-color: rgba(146, 216, 165, 0.3);
-}
-
-.turnstile-slot[data-state="error"],
-.turnstile-slot[data-state="expired"],
-.turnstile-slot[data-state="unsupported"] {
-  border-color: rgba(240, 160, 138, 0.34);
-}
-
-.turnstile-slot > div,
-.turnstile-slot iframe {
-  max-width: 100%;
-}
-
 .status {
   min-width: 0;
   color: var(--text-soft);

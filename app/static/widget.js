@@ -9,8 +9,6 @@ if (isNativeShell) {
 const widgetState = {
   config: null,
   sessionToken: localStorage.getItem("tempmail.sessionToken") || "",
-  turnstileToken: "",
-  turnstileWidgetId: null,
   selectedDomain: "",
   mailboxes: [],
   latestNotification: null,
@@ -28,7 +26,6 @@ const widgetEl = {
   domainCount: document.querySelector("#domain-count"),
   domainOptionList: document.querySelector("#domain-option-list"),
   generate: document.querySelector("#generate"),
-  turnstileSlot: document.querySelector("#turnstile-slot"),
   addressCard: document.querySelector("#address-card"),
   latestCodeCard: document.querySelector("#latest-code-card"),
   latestCodeValue: document.querySelector("#latest-code-value"),
@@ -214,84 +211,6 @@ async function api(path, options = {}) {
   return response.json();
 }
 
-function renderTurnstile() {
-  if (!widgetState.config?.turnstile_enabled) {
-    hideTurnstile();
-    return;
-  }
-
-  widgetEl.turnstileSlot.classList.remove("is-hidden");
-  widgetEl.turnstileSlot.dataset.state = "loading";
-  if (!widgetState.config.turnstile_site_key) {
-    widgetEl.turnstileSlot.innerHTML = "<span>Turnstile site key is not configured.</span>";
-    widgetEl.turnstileSlot.dataset.state = "error";
-    return;
-  }
-
-  if (!window.turnstile) {
-    loadTurnstileApi();
-    setTimeout(renderTurnstile, 250);
-    return;
-  }
-
-  if (widgetState.turnstileWidgetId !== null) {
-    window.turnstile.reset(widgetState.turnstileWidgetId);
-    return;
-  }
-
-  widgetEl.turnstileSlot.innerHTML = "";
-  widgetState.turnstileWidgetId = window.turnstile.render(widgetEl.turnstileSlot, {
-    sitekey: widgetState.config.turnstile_site_key,
-    theme: isNativeShell ? "dark" : "auto",
-    size: isNativeShell ? "flexible" : "normal",
-    callback(token) {
-      widgetState.turnstileToken = token;
-      widgetEl.turnstileSlot.dataset.state = "verified";
-    },
-    "expired-callback"() {
-      widgetState.turnstileToken = "";
-      widgetEl.turnstileSlot.dataset.state = "expired";
-    },
-    "error-callback"(errorCode) {
-      widgetState.turnstileToken = "";
-      widgetEl.turnstileSlot.dataset.state = "error";
-      const suffix = errorCode ? ` (${errorCode})` : "";
-      setWidgetStatus(`Human gate needs another try${suffix}.`, "error");
-    },
-    "unsupported-callback"() {
-      widgetState.turnstileToken = "";
-      widgetEl.turnstileSlot.dataset.state = "unsupported";
-      setWidgetStatus("Human gate is blocked by the embedded browser.", "error");
-    },
-  });
-}
-
-function loadTurnstileApi() {
-  if (document.querySelector('script[data-turnstile-api="true"]')) {
-    return;
-  }
-  const script = document.createElement("script");
-  script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-  script.async = true;
-  script.defer = true;
-  script.dataset.turnstileApi = "true";
-  document.head.appendChild(script);
-}
-
-function hideTurnstile() {
-  widgetEl.turnstileSlot.classList.add("is-hidden");
-  widgetEl.turnstileSlot.dataset.state = "idle";
-}
-
-function resetTurnstile() {
-  widgetState.turnstileToken = "";
-  widgetEl.turnstileSlot.dataset.state = "idle";
-  if (window.turnstile && widgetState.turnstileWidgetId !== null) {
-    window.turnstile.reset(widgetState.turnstileWidgetId);
-  }
-  hideTurnstile();
-}
-
 function latestMailbox() {
   return widgetState.mailboxes[0] || null;
 }
@@ -379,11 +298,6 @@ async function loadLatestCode({ quiet = false } = {}) {
 
 async function createMailbox(event) {
   event.preventDefault();
-  if (widgetState.config?.turnstile_enabled && !widgetState.turnstileToken) {
-    renderTurnstile();
-    setWidgetStatus("Human check required.", "error");
-    return;
-  }
 
   const body = {
     expires_in_minutes: widgetState.config?.mailbox_default_ttl_minutes || 60,
@@ -392,9 +306,6 @@ async function createMailbox(event) {
   const requestedDomain = widgetState.selectedDomain.trim();
   if (requestedDomain) {
     body.requested_domain = requestedDomain;
-  }
-  if (widgetState.turnstileToken) {
-    body.turnstile_token = widgetState.turnstileToken;
   }
 
   widgetEl.generate.disabled = true;
@@ -413,7 +324,6 @@ async function createMailbox(event) {
     setWidgetStatus(error.message, "error");
   } finally {
     widgetEl.generate.disabled = false;
-    resetTurnstile();
   }
 }
 
@@ -439,7 +349,6 @@ function startPolling() {
 async function bootWidget() {
   widgetState.config = await api("/client-config");
   renderDomainOptions();
-  hideTurnstile();
   await loadMailboxes();
   await loadLatestCode({ quiet: true });
   setWidgetStatus(widgetState.sessionToken ? "Listening." : "Ready.");

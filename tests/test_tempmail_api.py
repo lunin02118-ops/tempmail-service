@@ -92,10 +92,14 @@ def test_web_app_and_client_config_do_not_expose_private_turnstile_secret(tmp_pa
     assert worker_response.status_code == 200
     assert "challenges.cloudflare.com/turnstile" not in index_response.text
     assert "challenges.cloudflare.com/turnstile" not in widget_response.text
+    assert "turnstile-slot" not in widget_response.text
     assert "private-secret-key" not in script_response.text
     assert "private-secret-key" not in style_response.text
     assert "private-secret-key" not in widget_script_response.text
     assert "private-secret-key" not in widget_style_response.text
+    assert "turnstile" not in widget_script_response.text.lower()
+    assert "turnstile" not in widget_style_response.text.lower()
+    assert "human gate" not in widget_script_response.text.lower()
     assert "private-secret-key" not in archive_script_response.text
     assert "private-secret-key" not in archive_style_response.text
     assert "X-Archive-Admin-Token" in archive_script_response.text

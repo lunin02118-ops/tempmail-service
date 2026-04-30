@@ -451,7 +451,7 @@ def main() -> None:
         target=bootstrap_native_shell, args=(window, settings, shell_api), daemon=True
     ).start()
 
-    # Keep the default browser UA so Cloudflare Turnstile sees a normal WebView2/Edge client.
+    # Keep persistent WebView2 storage so the widget session survives restarts.
     webview.start(
         debug=settings.debug,
         private_mode=False,
