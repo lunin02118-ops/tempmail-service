@@ -4,7 +4,7 @@ import json
 import logging
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Header, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Header, HTTPException, Query, Response, status
 
 from app.config import AppSettings
 from app.repositories.ai_extractions import AIExtractionRepository
@@ -369,6 +369,22 @@ def get_latest_notification(
     repo: MessageRepository = Depends(get_message_repository),
 ) -> NotificationPayloadResponse | None:
     notification = repo.build_latest_code_notification_payload(session_token_hash)
+    return _serialize_notification(notification)
+
+
+@router.get("/widget/mailboxes", response_model=list[MailboxResponse])
+def list_widget_mailboxes(
+    repo: MailboxRepository = Depends(get_mailbox_repository),
+    limit: int = Query(default=250, ge=1, le=1000),
+) -> list[MailboxResponse]:
+    return [_serialize_mailbox(mailbox) for mailbox in repo.list_all_active(limit=limit)]
+
+
+@router.get("/widget/notifications/latest", response_model=NotificationPayloadResponse | None)
+def get_widget_latest_notification(
+    repo: MessageRepository = Depends(get_message_repository),
+) -> NotificationPayloadResponse | None:
+    notification = repo.build_latest_code_notification_payload_for_all()
     return _serialize_notification(notification)
 
 

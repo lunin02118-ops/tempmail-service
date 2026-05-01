@@ -1,5 +1,13 @@
 const widgetParams = new URLSearchParams(window.location.search);
 const isNativeShell = widgetParams.get("native") === "1" || navigator.userAgent.includes("SamGPTDesktopWidget");
+const showAllMail = widgetParams.get("all") !== "0";
+const widgetHashParams = new URLSearchParams(window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "");
+const widgetSessionToken = widgetHashParams.get("session_token") || widgetParams.get("session_token") || "";
+
+if (widgetSessionToken) {
+  localStorage.setItem("tempmail.sessionToken", widgetSessionToken);
+  history.replaceState(null, "", window.location.pathname + (isNativeShell ? "?native=1" : ""));
+}
 
 if (isNativeShell) {
   document.documentElement.classList.add("is-native-shell");
@@ -8,7 +16,7 @@ if (isNativeShell) {
 
 const widgetState = {
   config: null,
-  sessionToken: localStorage.getItem("tempmail.sessionToken") || "",
+  sessionToken: widgetSessionToken || localStorage.getItem("tempmail.sessionToken") || "",
   selectedDomain: "",
   mailboxes: [],
   latestNotification: null,
@@ -219,12 +227,12 @@ function renderAddress() {
   const mailbox = latestMailbox();
   if (!mailbox) {
     widgetEl.addressCard.className = "address-card is-empty";
-    widgetEl.addressCard.disabled = true;
+    widgetEl.addressCard.disabled = showAllMail ? false : true;
     widgetEl.addressCard.removeAttribute("data-copy-address");
     widgetEl.addressCard.innerHTML = `
-      <small>Generated mail</small>
+      <small>${showAllMail ? "All mailboxes" : "Generated mail"}</small>
       <strong>No address yet</strong>
-      <span>Choose domain and generate</span>
+      <span>${showAllMail ? "Waiting for any mailbox" : "Choose domain and generate"}</span>
     `;
     return;
   }
@@ -233,9 +241,9 @@ function renderAddress() {
   widgetEl.addressCard.disabled = false;
   widgetEl.addressCard.dataset.copyAddress = mailbox.address;
   widgetEl.addressCard.innerHTML = `
-    <small>Generated mail</small>
+    <small>${showAllMail ? `${widgetState.mailboxes.length} active mailboxes` : "Generated mail"}</small>
     <strong>${escapeHtml(mailbox.address)}</strong>
-    <span>Click to copy</span>
+    <span>${showAllMail ? "Latest active mailbox · click to copy" : "Click to copy"}</span>
   `;
 }
 
@@ -264,6 +272,11 @@ function rememberSeenMessages() {
 }
 
 async function loadMailboxes() {
+  if (showAllMail) {
+    widgetState.mailboxes = await api("/widget/mailboxes");
+    renderAddress();
+    return;
+  }
   if (!widgetState.sessionToken) {
     widgetState.mailboxes = [];
     renderAddress();
@@ -274,6 +287,25 @@ async function loadMailboxes() {
 }
 
 async function loadLatestCode({ quiet = false } = {}) {
+  if (showAllMail) {
+    const previousSeen = widgetState.lastSeenMessageId;
+    widgetState.latestNotification = await api("/widget/notifications/latest");
+    renderLatestCode();
+    const newestCode =
+      widgetState.latestNotification?.otp_code && Number(widgetState.latestNotification.message_id) > previousSeen
+        ? widgetState.latestNotification
+        : null;
+    if (newestCode) {
+      document.title = `${newestCode.otp_code} · DeskMail Widget`;
+      setWidgetStatus(`New code: ${newestCode.otp_code}`, "success");
+      await loadMailboxes();
+    } else if (!quiet) {
+      setWidgetStatus(widgetState.latestNotification ? "Synced all mail." : "Waiting for any code.");
+    }
+    rememberSeenMessages();
+    return;
+  }
+
   if (!widgetState.sessionToken) {
     widgetState.latestNotification = null;
     renderLatestCode();
@@ -351,7 +383,7 @@ async function bootWidget() {
   renderDomainOptions();
   await loadMailboxes();
   await loadLatestCode({ quiet: true });
-  setWidgetStatus(widgetState.sessionToken ? "Listening." : "Ready.");
+  setWidgetStatus(showAllMail ? "Listening to all mailboxes." : widgetState.sessionToken ? "Listening." : "Ready.");
   startPolling();
 }
 

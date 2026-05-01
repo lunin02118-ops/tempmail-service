@@ -56,6 +56,16 @@ class MailboxRepository:
             ).mappings().all()
             return [dict(row) for row in rows]
 
+    def list_all_active(self, *, limit: int = 250) -> list[dict[str, object]]:
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                select(mailboxes_table)
+                .where(mailboxes_table.c.is_active == 1)
+                .order_by(mailboxes_table.c.created_at.desc(), mailboxes_table.c.id.desc())
+                .limit(limit)
+            ).mappings().all()
+            return [dict(row) for row in rows]
+
     def get_by_address(self, address: str) -> dict[str, object] | None:
         with self._engine.connect() as conn:
             row = conn.execute(

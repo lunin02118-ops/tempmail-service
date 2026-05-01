@@ -120,6 +120,8 @@ def test_web_app_and_client_config_do_not_expose_private_turnstile_secret(tmp_pa
     assert "Desktop widget" in manifest_response.text
     assert "tempmail.sessionToken" in widget_script_response.text
     assert 'api("/mailboxes")' in widget_script_response.text
+    assert 'api("/widget/mailboxes")' in widget_script_response.text
+    assert 'api("/widget/notifications/latest")' in widget_script_response.text
     assert 'api("/notifications/latest")' in widget_script_response.text
     assert 'api("/inbox")' not in widget_script_response.text
     assert "data-copy-latest-code" in widget_script_response.text
@@ -300,6 +302,54 @@ def test_latest_notification_uses_ingest_order_when_received_at_is_older(tmp_pat
     latest_notification = latest_notification_response.json()
     assert latest_notification["message_id"] == second_response.json()["message_id"]
     assert latest_notification["otp_code"] == "222222"
+
+
+def test_widget_latest_notification_returns_latest_otp_across_sessions(tmp_path, monkeypatch):
+    setup_tempmail_env(tmp_path, monkeypatch)
+    first_client = TestClient(create_app())
+    second_client = TestClient(create_app())
+    ingest_client = TestClient(create_app())
+
+    first_mailbox = first_client.post("/mailboxes", json={"requested_local_part": "widgetone"}).json()["mailbox"]
+    second_mailbox = second_client.post("/mailboxes", json={"requested_local_part": "widgettwo"}).json()["mailbox"]
+    first_response = ingest_client.post(
+        "/ingest/messages",
+        headers={"X-Ingest-Webhook-Secret": "test-ingest-secret"},
+        json={
+            "to_address": first_mailbox["address"],
+            "from_address": "OpenAI <noreply@openai.com>",
+            "subject": "First widget code",
+            "provider_message_id": "provider-widget-first",
+            "body_text": "Use code 111111 to continue.",
+        },
+    )
+    second_response = ingest_client.post(
+        "/ingest/messages",
+        headers={"X-Ingest-Webhook-Secret": "test-ingest-secret"},
+        json={
+            "to_address": second_mailbox["address"],
+            "from_address": "OpenAI <noreply@openai.com>",
+            "subject": "Second widget code",
+            "provider_message_id": "provider-widget-second",
+            "body_text": "Use code 222222 to continue.",
+        },
+    )
+
+    mailboxes_response = ingest_client.get("/widget/mailboxes")
+    latest_response = ingest_client.get("/widget/notifications/latest")
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert mailboxes_response.status_code == 200
+    assert latest_response.status_code == 200
+    assert {mailbox["address"] for mailbox in mailboxes_response.json()} >= {
+        first_mailbox["address"],
+        second_mailbox["address"],
+    }
+    latest_payload = latest_response.json()
+    assert latest_payload["message_id"] == second_response.json()["message_id"]
+    assert latest_payload["mailbox_address"] == second_mailbox["address"]
+    assert latest_payload["otp_code"] == "222222"
 
 
 def test_admin_archive_is_token_protected_and_lists_all_sessions(tmp_path, monkeypatch):
