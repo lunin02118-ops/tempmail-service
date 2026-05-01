@@ -262,6 +262,46 @@ def test_latest_notification_returns_latest_otp_without_requiring_full_inbox(tmp
     assert latest_notification["otp_code"] == "654321"
 
 
+def test_latest_notification_uses_ingest_order_when_received_at_is_older(tmp_path, monkeypatch):
+    setup_tempmail_env(tmp_path, monkeypatch)
+    client = TestClient(create_app())
+
+    mailbox = client.post("/mailboxes", json={}).json()["mailbox"]
+    first_response = client.post(
+        "/ingest/messages",
+        headers={"X-Ingest-Webhook-Secret": "test-ingest-secret"},
+        json={
+            "to_address": mailbox["address"],
+            "from_address": "OpenAI <noreply@openai.com>",
+            "subject": "First login code",
+            "provider_message_id": "provider-order-first",
+            "received_at": "2026-05-01T20:00:00Z",
+            "body_text": "Use code 111111 to continue.",
+        },
+    )
+    second_response = client.post(
+        "/ingest/messages",
+        headers={"X-Ingest-Webhook-Secret": "test-ingest-secret"},
+        json={
+            "to_address": mailbox["address"],
+            "from_address": "OpenAI <noreply@openai.com>",
+            "subject": "Second login code",
+            "provider_message_id": "provider-order-second",
+            "received_at": "2026-05-01T19:00:00Z",
+            "body_text": "Use code 222222 to continue.",
+        },
+    )
+
+    latest_notification_response = client.get("/notifications/latest")
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert latest_notification_response.status_code == 200
+    latest_notification = latest_notification_response.json()
+    assert latest_notification["message_id"] == second_response.json()["message_id"]
+    assert latest_notification["otp_code"] == "222222"
+
+
 def test_admin_archive_is_token_protected_and_lists_all_sessions(tmp_path, monkeypatch):
     setup_tempmail_env(tmp_path, monkeypatch)
     monkeypatch.setenv("ARCHIVE_ADMIN_TOKEN", "archive-secret")

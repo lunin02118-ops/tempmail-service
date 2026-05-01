@@ -130,7 +130,7 @@ class MessageRepository:
             .where(mailboxes_table.c.is_active == 1)
             .where(ai_extractions_table.c.otp_code.is_not(None))
             .where(ai_extractions_table.c.otp_code != "")
-            .order_by(messages_table.c.received_at.desc(), messages_table.c.id.desc())
+            .order_by(messages_table.c.created_at.desc(), messages_table.c.id.desc())
             .limit(1)
         )
 
