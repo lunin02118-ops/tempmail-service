@@ -83,6 +83,93 @@ class MessageRepository:
             )
             return int(result.inserted_primary_key[0])
 
+    def list_public_inbox(self, *, limit: int = 50) -> list[dict[str, object]]:
+        mailbox_join = join(messages_table, mailboxes_table, messages_table.c.mailbox_id == mailboxes_table.c.id)
+        extraction_join = outerjoin(mailbox_join, ai_extractions_table, ai_extractions_table.c.message_id == messages_table.c.id)
+
+        query = (
+            select(
+                *self._message_summary_columns(),
+                mailboxes_table.c.address.label("mailbox_address"),
+                mailboxes_table.c.local_part.label("mailbox_local_part"),
+                mailboxes_table.c.domain.label("mailbox_domain"),
+                ai_extractions_table.c.summary.label("ai_summary"),
+                ai_extractions_table.c.otp_code.label("otp_code"),
+                ai_extractions_table.c.action_required.label("action_required"),
+                ai_extractions_table.c.sender_brand.label("sender_brand"),
+                ai_extractions_table.c.status.label("ai_status"),
+            )
+            .select_from(extraction_join)
+            .where(mailboxes_table.c.is_active == 1)
+            .where(mailboxes_table.c.visibility == "public")
+            .order_by(messages_table.c.received_at.desc(), messages_table.c.id.desc())
+            .limit(limit)
+        )
+
+        with self._engine.connect() as conn:
+            rows = conn.execute(query).mappings().all()
+            return [dict(row) for row in rows]
+
+    def list_public_codes(self, *, limit: int = 25) -> list[dict[str, object]]:
+        mailbox_join = join(messages_table, mailboxes_table, messages_table.c.mailbox_id == mailboxes_table.c.id)
+        extraction_join = outerjoin(mailbox_join, ai_extractions_table, ai_extractions_table.c.message_id == messages_table.c.id)
+
+        query = (
+            select(
+                *self._message_summary_columns(),
+                mailboxes_table.c.address.label("mailbox_address"),
+                mailboxes_table.c.local_part.label("mailbox_local_part"),
+                mailboxes_table.c.domain.label("mailbox_domain"),
+                ai_extractions_table.c.summary.label("ai_summary"),
+                ai_extractions_table.c.otp_code.label("otp_code"),
+                ai_extractions_table.c.action_required.label("action_required"),
+                ai_extractions_table.c.sender_brand.label("sender_brand"),
+                ai_extractions_table.c.status.label("ai_status"),
+            )
+            .select_from(extraction_join)
+            .where(mailboxes_table.c.is_active == 1)
+            .where(mailboxes_table.c.visibility == "public")
+            .where(ai_extractions_table.c.otp_code.is_not(None))
+            .where(ai_extractions_table.c.otp_code != "")
+            .order_by(messages_table.c.received_at.desc(), messages_table.c.id.desc())
+            .limit(limit)
+        )
+
+        with self._engine.connect() as conn:
+            rows = conn.execute(query).mappings().all()
+            return [dict(row) for row in rows]
+
+    def get_public_message_detail(self, message_id: int) -> dict[str, object] | None:
+        mailbox_join = join(messages_table, mailboxes_table, messages_table.c.mailbox_id == mailboxes_table.c.id)
+        extraction_join = outerjoin(mailbox_join, ai_extractions_table, ai_extractions_table.c.message_id == messages_table.c.id)
+        query = (
+            select(
+                messages_table,
+                mailboxes_table.c.address.label("mailbox_address"),
+                mailboxes_table.c.local_part.label("mailbox_local_part"),
+                mailboxes_table.c.domain.label("mailbox_domain"),
+                ai_extractions_table.c.provider.label("ai_provider"),
+                ai_extractions_table.c.model.label("ai_model"),
+                ai_extractions_table.c.summary.label("ai_summary"),
+                ai_extractions_table.c.message_type.label("message_type"),
+                ai_extractions_table.c.otp_code.label("otp_code"),
+                ai_extractions_table.c.action_required.label("action_required"),
+                ai_extractions_table.c.action_links_json.label("action_links_json"),
+                ai_extractions_table.c.sender_brand.label("sender_brand"),
+                ai_extractions_table.c.confidence.label("ai_confidence"),
+                ai_extractions_table.c.status.label("ai_status"),
+                ai_extractions_table.c.error_text.label("ai_error_text"),
+            )
+            .select_from(extraction_join)
+            .where(messages_table.c.id == message_id)
+            .where(mailboxes_table.c.is_active == 1)
+            .where(mailboxes_table.c.visibility == "public")
+            .limit(1)
+        )
+        with self._engine.connect() as conn:
+            row = conn.execute(query).mappings().first()
+            return None if row is None else dict(row)
+
     def list_for_session(self, session_token_hash: str) -> list[dict[str, object]]:
         mailbox_join = join(messages_table, mailboxes_table, messages_table.c.mailbox_id == mailboxes_table.c.id)
         extraction_join = outerjoin(mailbox_join, ai_extractions_table, ai_extractions_table.c.message_id == messages_table.c.id)

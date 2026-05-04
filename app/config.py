@@ -204,7 +204,10 @@ class AppSettings:
     telegram_webhook_secret: str | None = None
     gmail_client_secret_path: Path | None = None
     gmail_token_path: Path | None = None
+    gmail_token_seed_path: Path | None = None
     gmail_poll_seconds: int = 60
+    gmail_tempmail_address: str = ""
+    gmail_tempmail_in_process: bool = True
     default_from_alias_domain: str = ""
     neon_api_key: str | None = None
     render_api_key: str | None = None
@@ -227,6 +230,10 @@ class AppSettings:
     @property
     def has_gmail_ingest(self) -> bool:
         return self.gmail_client_secret_path is not None and self.gmail_token_path is not None
+
+    @property
+    def has_gmail_tempmail_ingest(self) -> bool:
+        return self.has_gmail_ingest and bool(self.gmail_tempmail_address)
 
     @classmethod
     def from_env(cls) -> "AppSettings":
@@ -271,7 +278,10 @@ class AppSettings:
             telegram_webhook_secret=os.getenv("TELEGRAM_WEBHOOK_SECRET"),
             gmail_client_secret_path=_resolve_optional_path("GMAIL_CLIENT_SECRET_PATH"),
             gmail_token_path=_resolve_optional_path("GMAIL_TOKEN_PATH"),
+            gmail_token_seed_path=_resolve_optional_path("GMAIL_TOKEN_SEED_PATH"),
             gmail_poll_seconds=int(os.getenv("GMAIL_POLL_SECONDS", "60")),
+            gmail_tempmail_address=os.getenv("GMAIL_TEMPMAIL_ADDRESS", "").strip().lower(),
+            gmail_tempmail_in_process=_read_bool_env("GMAIL_TEMPMAIL_IN_PROCESS", default=True),
             default_from_alias_domain=os.getenv("DEFAULT_FROM_ALIAS_DOMAIN", "").strip().lower(),
             neon_api_key=os.getenv("NEON_API_KEY"),
             render_api_key=os.getenv("RENDER_API_KEY"),

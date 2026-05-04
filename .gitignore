@@ -22,3 +22,7 @@ build/
 *.spec
 output/
 data/
+
+# Google OAuth credentials must never be committed
+google_client_secret*.json
+google_token*.json

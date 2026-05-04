@@ -388,6 +388,41 @@ def get_widget_latest_notification(
     return _serialize_notification(notification)
 
 
+@router.get("/public/mailboxes", response_model=list[MailboxResponse])
+def list_public_mailboxes(
+    repo: MailboxRepository = Depends(get_mailbox_repository),
+    limit: int = Query(default=50, ge=1, le=250),
+) -> list[MailboxResponse]:
+    return [_serialize_mailbox(mailbox) for mailbox in repo.list_public(limit=limit)]
+
+
+@router.get("/public/inbox", response_model=list[MessageSummaryResponse])
+def list_public_inbox(
+    repo: MessageRepository = Depends(get_message_repository),
+    limit: int = Query(default=25, ge=1, le=100),
+) -> list[MessageSummaryResponse]:
+    return [_serialize_message_summary(message) for message in repo.list_public_inbox(limit=limit)]
+
+
+@router.get("/public/codes", response_model=list[MessageSummaryResponse])
+def list_public_codes(
+    repo: MessageRepository = Depends(get_message_repository),
+    limit: int = Query(default=10, ge=1, le=50),
+) -> list[MessageSummaryResponse]:
+    return [_serialize_message_summary(message) for message in repo.list_public_codes(limit=limit)]
+
+
+@router.get("/public/messages/{message_id}", response_model=MessageDetailResponse)
+def get_public_message_detail(
+    message_id: int,
+    repo: MessageRepository = Depends(get_message_repository),
+) -> MessageDetailResponse:
+    message = repo.get_public_message_detail(message_id)
+    if message is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="message not found")
+    return _serialize_message_detail(message)
+
+
 @router.post("/ingest/messages", response_model=IngestMessageResponse)
 async def ingest_message(
     request: IngestMessageRequest,

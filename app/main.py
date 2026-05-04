@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
+import logging
+import shutil
 import threading
+from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
@@ -15,15 +20,79 @@ from app.api.tempmail import router as tempmail_router
 from app.api.telegram import router as telegram_router, set_telegram_client_dependency
 from app.config import AppSettings
 from app.db import initialize_database
-from app.worker import run_worker_loop
+from app.worker import process_gmail_tempmail_once, run_worker_loop
+
+
+logger = logging.getLogger(__name__)
+
+
+def _ensure_writable_gmail_token(settings: AppSettings) -> None:
+    if not settings.gmail_token_path:
+        return
+    target = Path(settings.gmail_token_path)
+    if target.exists() and target.stat().st_size > 0:
+        return
+    seed = settings.gmail_token_seed_path
+    if not seed:
+        return
+    seed_path = Path(seed)
+    if not seed_path.exists():
+        logger.warning("gmail token seed missing: %s", seed_path)
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(seed_path, target)
+    try:
+        target.chmod(0o600)
+    except OSError:
+        pass
+    logger.info("seeded writable gmail token at %s from %s", target, seed_path)
+
+
+async def _gmail_tempmail_polling_loop(settings: AppSettings) -> None:
+    interval = max(int(settings.gmail_poll_seconds or 60), 15)
+    logger.info("gmail tempmail in-process polling started (interval=%ss)", interval)
+    while True:
+        try:
+            result = await asyncio.to_thread(process_gmail_tempmail_once, settings)
+            if result.get("processed"):
+                logger.info("gmail tempmail poll: %s", result)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("gmail tempmail poll iteration failed")
+        try:
+            await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            raise
 
 
 def create_app(telegram_client=None) -> FastAPI:
     settings = AppSettings.from_env()
     initialize_database(settings)
     set_telegram_client_dependency(telegram_client)
+    _ensure_writable_gmail_token(settings)
 
-    app = FastAPI(title="samgpt-tempmail")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        background_tasks: list[asyncio.Task] = []
+        if settings.has_gmail_tempmail_ingest and settings.gmail_tempmail_in_process:
+            task = asyncio.create_task(
+                _gmail_tempmail_polling_loop(settings),
+                name="gmail-tempmail-polling",
+            )
+            background_tasks.append(task)
+        try:
+            yield
+        finally:
+            for task in background_tasks:
+                task.cancel()
+            for task in background_tasks:
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+
+    app = FastAPI(title="samgpt-tempmail", lifespan=lifespan)
     static_dir = settings.project_root / "app" / "static"
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     app.include_router(admin_archive_router)
@@ -63,6 +132,8 @@ def create_app(telegram_client=None) -> FastAPI:
             "mailbox_default_ttl_minutes": settings.mailbox_default_ttl_minutes,
             "turnstile_site_key": settings.turnstile_site_key if turnstile_enabled else None,
             "turnstile_enabled": turnstile_enabled,
+            "shared_inbox_enabled": bool(settings.gmail_tempmail_address),
+            "shared_inbox_address": settings.gmail_tempmail_address or None,
         }
 
     @app.get("/health")

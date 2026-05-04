@@ -8,6 +8,7 @@ const state = {
   selectedMessageId: null,
   selectedMessage: null,
   selectedSourceTab: "text",
+  sharedCodes: [],
 };
 
 const el = {
@@ -23,6 +24,10 @@ const el = {
   messageDetail: document.querySelector("#message-detail"),
   refresh: document.querySelector("#refresh"),
   analyze: document.querySelector("#analyze"),
+  sharedCodesSection: document.querySelector("#shared-codes"),
+  sharedCodesList: document.querySelector("#shared-codes-list"),
+  sharedCodesRefresh: document.querySelector("#shared-codes-refresh"),
+  sharedCodesTitle: document.querySelector("#shared-codes-title"),
 };
 
 function importSharedSessionFromUrl() {
@@ -555,6 +560,60 @@ function renderDetail(message) {
   mountHtmlPreview(el.messageDetail, message);
 }
 
+function renderSharedCodes() {
+  if (!el.sharedCodesSection || !el.sharedCodesList) {
+    return;
+  }
+  if (!state.config?.shared_inbox_enabled) {
+    el.sharedCodesSection.classList.add("is-hidden");
+    return;
+  }
+  el.sharedCodesSection.classList.remove("is-hidden");
+  if (el.sharedCodesTitle && state.config?.shared_inbox_address) {
+    el.sharedCodesTitle.textContent = `Recent codes / ${state.config.shared_inbox_address}`;
+  }
+
+  if (!state.sharedCodes.length) {
+    el.sharedCodesList.innerHTML = '<span class="shared-codes-empty">No codes captured yet. Send something to the shared inbox.</span>';
+    return;
+  }
+
+  el.sharedCodesList.innerHTML = state.sharedCodes
+    .map((message) => {
+      const code = String(message.otp_code || "").trim();
+      const sender = message.sender_brand || message.from_address || "unknown sender";
+      return `
+        <article class="shared-code-card" tabindex="0" data-shared-code-id="${message.id}" data-copy-code="${escapeHtml(code)}" aria-label="Copy code ${escapeHtml(code)}">
+          <div class="shared-code-row">
+            <strong>${escapeHtml(code || "?")}</strong>
+            <span class="shared-code-pill">${escapeHtml(formatDate(message.received_at))}</span>
+          </div>
+          <small>${escapeHtml(sender)}</small>
+          <div class="shared-code-meta">
+            <span class="shared-code-pill">${escapeHtml(message.mailbox_address || "shared")}</span>
+            ${message.subject ? `<small>${escapeHtml(message.subject)}</small>` : ""}
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+async function loadSharedCodes() {
+  if (!state.config?.shared_inbox_enabled) {
+    return;
+  }
+  try {
+    const codes = await api("/public/codes?limit=12");
+    state.sharedCodes = Array.isArray(codes) ? codes : [];
+    renderSharedCodes();
+  } catch {
+    if (el.sharedCodesList) {
+      el.sharedCodesList.innerHTML = '<span class="shared-codes-empty">Shared codes feed is offline right now.</span>';
+    }
+  }
+}
+
 async function loadMailboxes() {
   if (!state.sessionToken) {
     renderMailboxes();
@@ -675,6 +734,8 @@ async function boot() {
     el.ttl.value = String(state.config.mailbox_default_ttl_minutes);
   }
   renderTurnstile();
+  renderSharedCodes();
+  loadSharedCodes().catch(() => undefined);
 
   if (state.sessionToken) {
     try {
@@ -773,11 +834,49 @@ el.mailboxStrip.addEventListener("click", (event) => {
   copyAddress(button.dataset.copy).catch((error) => setStatus(error.message, "error"));
 });
 
+if (el.sharedCodesRefresh) {
+  el.sharedCodesRefresh.addEventListener("click", () => {
+    loadSharedCodes().catch(() => undefined);
+  });
+}
+
+if (el.sharedCodesList) {
+  el.sharedCodesList.addEventListener("click", (event) => {
+    const card = event.target.closest("[data-copy-code]");
+    if (!card) {
+      return;
+    }
+    const code = card.dataset.copyCode || "";
+    if (!code) {
+      return;
+    }
+    copyCode(code).catch((error) => setStatus(error.message, "error"));
+  });
+  el.sharedCodesList.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+    const card = event.target.closest("[data-copy-code]");
+    if (!card) {
+      return;
+    }
+    event.preventDefault();
+    const code = card.dataset.copyCode || "";
+    if (!code) {
+      return;
+    }
+    copyCode(code).catch((error) => setStatus(error.message, "error"));
+  });
+}
+
 setInterval(() => {
   if (state.sessionToken) {
     loadInbox({ updateStatus: false })
       .then(() => refreshSelectedMessageDetail())
       .catch(() => undefined);
+  }
+  if (state.config?.shared_inbox_enabled) {
+    loadSharedCodes().catch(() => undefined);
   }
 }, 12_000);
 
