@@ -4,7 +4,9 @@ import argparse
 import asyncio
 import logging
 import shutil
+import sys
 import threading
+import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -26,40 +28,49 @@ from app.worker import process_gmail_tempmail_once, run_worker_loop
 logger = logging.getLogger(__name__)
 
 
+def _stamp(message: str) -> None:
+    print(f"[gmail-tempmail] {message}", file=sys.stdout, flush=True)
+
+
 def _ensure_writable_gmail_token(settings: AppSettings) -> None:
     if not settings.gmail_token_path:
+        _stamp("token path not configured; skipping seed")
         return
     target = Path(settings.gmail_token_path)
     if target.exists() and target.stat().st_size > 0:
+        _stamp(f"token already present at {target}")
         return
     seed = settings.gmail_token_seed_path
     if not seed:
+        _stamp(f"token missing at {target} and no seed path configured")
         return
     seed_path = Path(seed)
     if not seed_path.exists():
-        logger.warning("gmail token seed missing: %s", seed_path)
+        _stamp(f"token seed missing at {seed_path}")
         return
-    target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(seed_path, target)
     try:
-        target.chmod(0o600)
-    except OSError:
-        pass
-    logger.info("seeded writable gmail token at %s from %s", target, seed_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(seed_path, target)
+        try:
+            target.chmod(0o600)
+        except OSError:
+            pass
+        _stamp(f"seeded writable token {target} <- {seed_path}")
+    except Exception:
+        _stamp(f"failed to seed token: {traceback.format_exc()}")
 
 
 async def _gmail_tempmail_polling_loop(settings: AppSettings) -> None:
     interval = max(int(settings.gmail_poll_seconds or 60), 15)
-    logger.info("gmail tempmail in-process polling started (interval=%ss)", interval)
+    _stamp(f"polling loop started (interval={interval}s, address={settings.gmail_tempmail_address})")
     while True:
         try:
             result = await asyncio.to_thread(process_gmail_tempmail_once, settings)
-            if result.get("processed"):
-                logger.info("gmail tempmail poll: %s", result)
+            _stamp(f"poll result: {result}")
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.exception("gmail tempmail poll iteration failed")
+            _stamp(f"poll iteration failed: {traceback.format_exc()}")
         try:
             await asyncio.sleep(interval)
         except asyncio.CancelledError:
@@ -74,6 +85,15 @@ def create_app(telegram_client=None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        _stamp(
+            "lifespan startup: "
+            f"has_gmail_tempmail_ingest={settings.has_gmail_tempmail_ingest} "
+            f"in_process={settings.gmail_tempmail_in_process} "
+            f"address={settings.gmail_tempmail_address!r} "
+            f"client_secret_path={settings.gmail_client_secret_path} "
+            f"token_path={settings.gmail_token_path} "
+            f"token_seed_path={settings.gmail_token_seed_path}"
+        )
         background_tasks: list[asyncio.Task] = []
         if settings.has_gmail_tempmail_ingest and settings.gmail_tempmail_in_process:
             task = asyncio.create_task(
@@ -81,9 +101,12 @@ def create_app(telegram_client=None) -> FastAPI:
                 name="gmail-tempmail-polling",
             )
             background_tasks.append(task)
+        else:
+            _stamp("polling task NOT started (gmail tempmail ingest disabled)")
         try:
             yield
         finally:
+            _stamp("lifespan shutdown")
             for task in background_tasks:
                 task.cancel()
             for task in background_tasks:
