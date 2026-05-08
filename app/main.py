@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi import Response
 from fastapi.responses import FileResponse
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -27,6 +28,9 @@ from app.worker import process_gmail_tempmail_once, run_worker_loop
 
 
 logger = logging.getLogger(__name__)
+
+
+NO_STORE_HEADERS = {"Cache-Control": "no-store, max-age=0"}
 
 
 def _stamp(message: str) -> None:
@@ -137,17 +141,17 @@ def create_app(telegram_client=None) -> FastAPI:
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     def web_app() -> HTMLResponse:
         index_path = static_dir / "index.html"
-        return HTMLResponse(index_path.read_text(encoding="utf-8"))
+        return HTMLResponse(index_path.read_text(encoding="utf-8"), headers=NO_STORE_HEADERS)
 
     @app.get("/widget", response_class=HTMLResponse, include_in_schema=False)
     def desktop_widget() -> HTMLResponse:
         widget_path = static_dir / "widget.html"
-        return HTMLResponse(widget_path.read_text(encoding="utf-8"))
+        return HTMLResponse(widget_path.read_text(encoding="utf-8"), headers=NO_STORE_HEADERS)
 
     @app.get("/admin/archive", response_class=HTMLResponse, include_in_schema=False)
     def admin_archive() -> HTMLResponse:
         archive_path = static_dir / "archive.html"
-        return HTMLResponse(archive_path.read_text(encoding="utf-8"))
+        return HTMLResponse(archive_path.read_text(encoding="utf-8"), headers=NO_STORE_HEADERS)
 
     @app.get("/manifest.webmanifest", include_in_schema=False)
     def web_manifest() -> FileResponse:
@@ -158,7 +162,8 @@ def create_app(telegram_client=None) -> FastAPI:
         return FileResponse(static_dir / "service-worker.js", media_type="application/javascript")
 
     @app.get("/client-config")
-    def client_config() -> dict[str, object]:
+    def client_config(response: Response) -> dict[str, object]:
+        response.headers.update(NO_STORE_HEADERS)
         turnstile_enabled = settings.turnstile_enabled and bool(settings.turnstile_secret_key)
         return {
             "mail_domain": settings.active_mail_domain,

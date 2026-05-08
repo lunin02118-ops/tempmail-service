@@ -196,11 +196,16 @@ async function api(path, options = {}) {
     headers.set("X-Session-Token", widgetState.sessionToken);
   }
 
-  const response = await fetch(path, {
+  const fetchOptions = {
     credentials: "same-origin",
     ...options,
     headers,
-  });
+  };
+  if (!("cache" in fetchOptions) && path === "/client-config") {
+    fetchOptions.cache = "no-store";
+  }
+
+  const response = await fetch(path, fetchOptions);
 
   if (!response.ok) {
     let detail = response.statusText;

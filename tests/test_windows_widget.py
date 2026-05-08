@@ -3,6 +3,7 @@ import json
 from windows_widget.settings import (
     MIN_WIDGET_HEIGHT,
     MIN_WIDGET_WIDTH,
+    WIDGET_CACHE_VERSION,
     WidgetSettings,
     load_saved_settings,
     normalize_widget_url,
@@ -13,13 +14,13 @@ from windows_widget.settings import (
 
 def test_normalize_widget_url_adds_native_flag():
     assert normalize_widget_url("https://tempmail-web.onrender.com/widget") == (
-        "https://tempmail-web.onrender.com/widget?native=1"
+        f"https://tempmail-web.onrender.com/widget?native=1&v={WIDGET_CACHE_VERSION}"
     )
 
 
 def test_normalize_widget_url_preserves_existing_query():
     assert normalize_widget_url("https://tempmail-web.onrender.com/widget?foo=bar") == (
-        "https://tempmail-web.onrender.com/widget?foo=bar&native=1"
+        f"https://tempmail-web.onrender.com/widget?foo=bar&native=1&v={WIDGET_CACHE_VERSION}"
     )
 
 
@@ -41,7 +42,7 @@ def test_resolve_settings_prefers_overrides():
     )
 
     assert settings == WidgetSettings(
-        url="https://example.com/widget?native=1",
+        url=f"https://example.com/widget?native=1&v={WIDGET_CACHE_VERSION}",
         width=520,
         height=780,
         x=None,
