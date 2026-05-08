@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from threading import Lock
 
 from sqlalchemy import (
     JSON,
@@ -24,6 +25,8 @@ from app.config import AppSettings
 
 
 metadata = MetaData()
+_initialized_database_urls: set[str] = set()
+_initialize_lock = Lock()
 
 aliases_table = Table(
     "aliases",
@@ -158,7 +161,10 @@ def get_engine(database_url: str) -> Engine:
 
 def initialize_database(settings: AppSettings) -> Path | str:
     engine = get_engine(settings.database_url)
-    metadata.create_all(engine)
+    with _initialize_lock:
+        if settings.database_url not in _initialized_database_urls:
+            metadata.create_all(engine)
+            _initialized_database_urls.add(settings.database_url)
     if settings.database_url.startswith("sqlite:///"):
         return resolve_sqlite_path(settings.database_url)
     return settings.database_url

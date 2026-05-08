@@ -9,8 +9,8 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 APP_NAME = "SamGPTDesktopWidget"
 DEFAULT_WIDGET_URL = "https://tempmail-web.onrender.com/widget"
-MIN_WIDGET_WIDTH = 420
-MIN_WIDGET_HEIGHT = 560
+MIN_WIDGET_WIDTH = 360
+MIN_WIDGET_HEIGHT = 430
 PERSISTED_SETTING_KEYS = (
     "url",
     "width",
@@ -26,8 +26,8 @@ PERSISTED_SETTING_KEYS = (
 @dataclass(slots=True)
 class WidgetSettings:
     url: str = DEFAULT_WIDGET_URL
-    width: int = 430
-    height: int = 900
+    width: int = 420
+    height: int = 540
     x: int | None = None
     y: int | None = None
     always_on_top: bool = False

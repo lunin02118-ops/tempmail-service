@@ -73,44 +73,49 @@ def process_once(
 ) -> dict[str, int | str | None]:
     initialize_database(settings)
 
+    owns_gmail_client = gmail_client is None
     gmail_client = gmail_client or GmailClient(settings)
-    if telegram_client is None:
-        if not settings.telegram_bot_token:
-            raise ValueError("TELEGRAM_BOT_TOKEN is required for worker mode")
-        telegram_client = TelegramClient(settings.telegram_bot_token)
+    try:
+        if telegram_client is None:
+            if not settings.telegram_bot_token:
+                raise ValueError("TELEGRAM_BOT_TOKEN is required for worker mode")
+            telegram_client = TelegramClient(settings.telegram_bot_token)
 
-    alias_repo = AliasRepository(settings)
-    message_repo = InboundMessageRepository(settings)
-    settings_repo = AppSettingsRepository(settings)
+        alias_repo = AliasRepository(settings)
+        message_repo = InboundMessageRepository(settings)
+        settings_repo = AppSettingsRepository(settings)
 
-    pending_ids, skipped_seen, newest_seen_message_id = _collect_pending_message_ids(
-        gmail_client,
-        settings_repo,
-        cursor_key=LAST_SEEN_GMAIL_MESSAGE_ID_KEY,
-    )
-
-    delivered = 0
-    last_processed_message_id = settings_repo.get(LAST_SEEN_GMAIL_MESSAGE_ID_KEY)
-    for message_id in pending_ids:
-        gmail_message = gmail_client.get_message(message_id)
-        result = ingest_gmail_message(
-            settings=settings,
-            gmail_message=gmail_message,
-            alias_repo=alias_repo,
-            message_repo=message_repo,
-            telegram_client=telegram_client,
+        pending_ids, skipped_seen, newest_seen_message_id = _collect_pending_message_ids(
+            gmail_client,
+            settings_repo,
+            cursor_key=LAST_SEEN_GMAIL_MESSAGE_ID_KEY,
         )
-        if result.get("status") == "delivered":
-            delivered += 1
-        settings_repo.set(LAST_SEEN_GMAIL_MESSAGE_ID_KEY, message_id)
-        last_processed_message_id = message_id
 
-    return {
-        "processed": len(pending_ids),
-        "delivered": delivered,
-        "skipped_seen": skipped_seen,
-        "last_seen_gmail_message_id": last_processed_message_id or newest_seen_message_id,
-    }
+        delivered = 0
+        last_processed_message_id = settings_repo.get(LAST_SEEN_GMAIL_MESSAGE_ID_KEY)
+        for message_id in pending_ids:
+            gmail_message = gmail_client.get_message(message_id)
+            result = ingest_gmail_message(
+                settings=settings,
+                gmail_message=gmail_message,
+                alias_repo=alias_repo,
+                message_repo=message_repo,
+                telegram_client=telegram_client,
+            )
+            if result.get("status") == "delivered":
+                delivered += 1
+            settings_repo.set(LAST_SEEN_GMAIL_MESSAGE_ID_KEY, message_id)
+            last_processed_message_id = message_id
+
+        return {
+            "processed": len(pending_ids),
+            "delivered": delivered,
+            "skipped_seen": skipped_seen,
+            "last_seen_gmail_message_id": last_processed_message_id or newest_seen_message_id,
+        }
+    finally:
+        if owns_gmail_client:
+            gmail_client.close()
 
 
 async def _ingest_pending_gmail_messages(
@@ -159,68 +164,83 @@ def process_gmail_tempmail_once(
     if not settings.has_gmail_ingest:
         raise ValueError("GMAIL_CLIENT_SECRET_PATH and GMAIL_TOKEN_PATH are required for tempmail Gmail ingest")
 
+    owns_gmail_client = gmail_client is None
     gmail_client = gmail_client or GmailClient(settings)
+    try:
+        settings_repo = AppSettingsRepository(settings)
 
-    mailbox_repo = MailboxRepository(settings)
-    message_repo = MessageRepository(settings)
-    ai_repo = AIExtractionRepository(settings)
-    analysis_service = MessageAnalysisService(settings)
-    settings_repo = AppSettingsRepository(settings)
-
-    existing_cursor = settings_repo.get(LAST_SEEN_GMAIL_TEMPMAIL_MESSAGE_ID_KEY)
-    if not existing_cursor:
-        probe = gmail_client.list_message_ids(max_results=1)
-        newest = (probe.get("message_ids") or [None])[0]
-        if newest:
-            settings_repo.set(LAST_SEEN_GMAIL_TEMPMAIL_MESSAGE_ID_KEY, str(newest))
+        existing_cursor = settings_repo.get(LAST_SEEN_GMAIL_TEMPMAIL_MESSAGE_ID_KEY)
+        if not existing_cursor:
+            probe = gmail_client.list_message_ids(max_results=1)
+            newest = (probe.get("message_ids") or [None])[0]
+            if newest:
+                settings_repo.set(LAST_SEEN_GMAIL_TEMPMAIL_MESSAGE_ID_KEY, str(newest))
+                return {
+                    "processed": 0,
+                    "delivered": 0,
+                    "skipped_seen": 0,
+                    "last_seen_gmail_tempmail_message_id": str(newest),
+                    "bootstrap": True,
+                }
             return {
                 "processed": 0,
                 "delivered": 0,
                 "skipped_seen": 0,
-                "last_seen_gmail_tempmail_message_id": str(newest),
+                "last_seen_gmail_tempmail_message_id": None,
                 "bootstrap": True,
             }
-        return {
-            "processed": 0,
-            "delivered": 0,
-            "skipped_seen": 0,
-            "last_seen_gmail_tempmail_message_id": None,
-            "bootstrap": True,
-        }
 
-    pending_ids, skipped_seen, newest_seen_message_id = _collect_pending_message_ids(
-        gmail_client,
-        settings_repo,
-        cursor_key=LAST_SEEN_GMAIL_TEMPMAIL_MESSAGE_ID_KEY,
-    )
-
-    truncated = False
-    if max_messages and len(pending_ids) > max_messages:
-        pending_ids = pending_ids[-max_messages:]
-        truncated = True
-
-    delivered, last_processed_message_id = asyncio.run(
-        _ingest_pending_gmail_messages(
-            settings=settings,
-            gmail_client=gmail_client,
-            pending_ids=pending_ids,
-            settings_repo=settings_repo,
-            mailbox_repo=mailbox_repo,
-            message_repo=message_repo,
-            ai_repo=ai_repo,
-            analysis_service=analysis_service,
-            allow_remote_ai=allow_remote_ai,
+        pending_ids, skipped_seen, newest_seen_message_id = _collect_pending_message_ids(
+            gmail_client,
+            settings_repo,
+            cursor_key=LAST_SEEN_GMAIL_TEMPMAIL_MESSAGE_ID_KEY,
         )
-    )
 
-    return {
-        "processed": len(pending_ids),
-        "delivered": delivered,
-        "skipped_seen": skipped_seen,
-        "last_seen_gmail_tempmail_message_id": last_processed_message_id or existing_cursor or newest_seen_message_id,
-        "truncated": truncated,
-        "bootstrap": False,
-    }
+        truncated = False
+        if max_messages and len(pending_ids) > max_messages:
+            pending_ids = pending_ids[-max_messages:]
+            truncated = True
+
+        if not pending_ids:
+            return {
+                "processed": 0,
+                "delivered": 0,
+                "skipped_seen": skipped_seen,
+                "last_seen_gmail_tempmail_message_id": existing_cursor or newest_seen_message_id,
+                "truncated": False,
+                "bootstrap": False,
+            }
+
+        mailbox_repo = MailboxRepository(settings)
+        message_repo = MessageRepository(settings)
+        ai_repo = AIExtractionRepository(settings)
+        analysis_service = MessageAnalysisService(settings)
+
+        delivered, last_processed_message_id = asyncio.run(
+            _ingest_pending_gmail_messages(
+                settings=settings,
+                gmail_client=gmail_client,
+                pending_ids=pending_ids,
+                settings_repo=settings_repo,
+                mailbox_repo=mailbox_repo,
+                message_repo=message_repo,
+                ai_repo=ai_repo,
+                analysis_service=analysis_service,
+                allow_remote_ai=allow_remote_ai,
+            )
+        )
+
+        return {
+            "processed": len(pending_ids),
+            "delivered": delivered,
+            "skipped_seen": skipped_seen,
+            "last_seen_gmail_tempmail_message_id": last_processed_message_id or existing_cursor or newest_seen_message_id,
+            "truncated": truncated,
+            "bootstrap": False,
+        }
+    finally:
+        if owns_gmail_client:
+            gmail_client.close()
 
 
 def process_telegram_updates_once(

@@ -1,6 +1,14 @@
 import json
 
-from windows_widget.settings import WidgetSettings, load_saved_settings, normalize_widget_url, resolve_settings, save_settings
+from windows_widget.settings import (
+    MIN_WIDGET_HEIGHT,
+    MIN_WIDGET_WIDTH,
+    WidgetSettings,
+    load_saved_settings,
+    normalize_widget_url,
+    resolve_settings,
+    save_settings,
+)
 
 
 def test_normalize_widget_url_adds_native_flag():
@@ -90,5 +98,5 @@ def test_load_saved_settings_ignores_runtime_only_flags(tmp_path):
 def test_resolve_settings_clamps_small_dimensions():
     settings = resolve_settings({"width": 360, "height": 420}, {})
 
-    assert settings.width == 420
-    assert settings.height == 560
+    assert settings.width == MIN_WIDGET_WIDTH
+    assert settings.height == MIN_WIDGET_HEIGHT

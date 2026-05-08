@@ -23,6 +23,8 @@ except ImportError:
 try:
     from windows_widget.settings import (
         APP_NAME,
+        MIN_WIDGET_HEIGHT,
+        MIN_WIDGET_WIDTH,
         WidgetSettings,
         load_saved_settings,
         resolve_settings,
@@ -34,6 +36,8 @@ try:
 except ModuleNotFoundError:
     from settings import (  # type: ignore
         APP_NAME,
+        MIN_WIDGET_HEIGHT,
+        MIN_WIDGET_WIDTH,
         WidgetSettings,
         load_saved_settings,
         resolve_settings,
@@ -231,6 +235,84 @@ def persist_window_state(window: webview.Window, settings: WidgetSettings) -> No
     save_settings(settings)
 
 
+def inject_native_resize_handle(window: webview.Window) -> None:
+    script = """
+(() => {
+  if (document.getElementById("native-resize-grip")) {
+    return;
+  }
+
+  const style = document.createElement("style");
+  style.id = "native-resize-grip-style";
+  style.textContent = `
+    .is-native-shell .desk-widget {
+      min-height: auto !important;
+      max-height: calc(100vh - 16px) !important;
+    }
+
+    #native-resize-grip {
+      position: fixed;
+      right: 5px;
+      bottom: 5px;
+      z-index: 99999;
+      width: 22px;
+      height: 22px;
+      border: 0;
+      border-radius: 8px 0 16px 0;
+      background:
+        linear-gradient(135deg, transparent 0 45%, rgba(183, 227, 220, 0.58) 46% 52%, transparent 53%),
+        linear-gradient(135deg, transparent 0 62%, rgba(183, 227, 220, 0.36) 63% 69%, transparent 70%);
+      cursor: nwse-resize;
+      opacity: 0.72;
+    }
+
+    #native-resize-grip:hover,
+    #native-resize-grip:focus-visible {
+      opacity: 1;
+      background-color: rgba(141, 201, 192, 0.1);
+    }
+  `;
+  document.head.append(style);
+
+  const grip = document.createElement("button");
+  grip.id = "native-resize-grip";
+  grip.type = "button";
+  grip.title = "Resize widget";
+  grip.setAttribute("aria-label", "Resize widget");
+  document.body.append(grip);
+
+  let startX = 0;
+  let startY = 0;
+  let startWidth = 0;
+  let startHeight = 0;
+
+  grip.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    startX = event.screenX;
+    startY = event.screenY;
+    startWidth = window.outerWidth || window.innerWidth;
+    startHeight = window.outerHeight || window.innerHeight;
+    grip.setPointerCapture(event.pointerId);
+  });
+
+  grip.addEventListener("pointermove", (event) => {
+    if (!grip.hasPointerCapture(event.pointerId)) {
+      return;
+    }
+    const width = Math.round(startWidth + event.screenX - startX);
+    const height = Math.round(startHeight + event.screenY - startY);
+    window.pywebview?.api?.resize_window(width, height);
+  });
+})();
+"""
+    for _ in range(20):
+        try:
+            window.evaluate_js(script)
+            return
+        except Exception:
+            time.sleep(0.25)
+
+
 def build_overrides(args: argparse.Namespace) -> dict[str, object]:
     return {
         "url": args.url,
@@ -372,6 +454,27 @@ class NativeShellApi:
             self._window.destroy()
         return True
 
+    def resize_window(self, width: int, height: int) -> bool:
+        hwnd = self._ensure_hwnd()
+        if not hwnd:
+            return False
+
+        width = max(int(width), MIN_WIDGET_WIDTH)
+        height = max(int(height), MIN_WIDGET_HEIGHT)
+        user32.SetWindowPos(
+            hwnd,
+            0,
+            0,
+            0,
+            width,
+            height,
+            SWP_NOMOVE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE,
+        )
+        self._settings.width = width
+        self._settings.height = height
+        save_settings(self._settings)
+        return True
+
     def open_full_app(self, url: str) -> bool:
         if not url:
             return False
@@ -403,7 +506,7 @@ def create_window(settings: WidgetSettings, shell_api: NativeShellApi) -> webvie
         x=settings.x,
         y=settings.y,
         resizable=True,
-        min_size=(420, 560),
+        min_size=(MIN_WIDGET_WIDTH, MIN_WIDGET_HEIGHT),
         frameless=True,
         easy_drag=False,
         shadow=True,
@@ -420,6 +523,7 @@ def bootstrap_native_shell(window: webview.Window, settings: WidgetSettings, she
 
     shell_api._set_hwnd(hwnd)
     shell_api._apply_window_mode()
+    inject_native_resize_handle(window)
 
     if settings.close_after > 0:
         time.sleep(settings.close_after)

@@ -12,9 +12,20 @@ GMAIL_MESSAGES_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages"
 
 
 class GmailClient:
-    def __init__(self, settings: AppSettings, timeout: float = 30.0) -> None:
+    def __init__(self, settings: AppSettings, timeout: float = 30.0, persistent: bool = False) -> None:
         self._settings = settings
         self._timeout = timeout
+        self._client = httpx.Client(timeout=timeout) if persistent else None
+
+    def close(self) -> None:
+        if self._client is not None:
+            self._client.close()
+
+    def __enter__(self) -> "GmailClient":
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        self.close()
 
     def _load_token_payload(self) -> dict:
         return json.loads(Path(self._settings.gmail_token_path).read_text())
@@ -43,16 +54,16 @@ class GmailClient:
         if not client_id or not client_secret:
             raise ValueError("gmail client secret file does not contain client_id/client_secret")
 
-        response = httpx.post(
-            token_uri,
-            data={
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "refresh_token": refresh_token,
-                "grant_type": "refresh_token",
-            },
-            timeout=self._timeout,
-        )
+        data = {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+        }
+        if self._client is not None:
+            response = self._client.post(token_uri, data=data)
+        else:
+            response = httpx.post(token_uri, data=data, timeout=self._timeout)
         response.raise_for_status()
         payload = response.json()
         access_token = payload.get("access_token")
@@ -75,7 +86,7 @@ class GmailClient:
 
     def _get_with_auto_refresh(self, url: str, params: dict) -> dict:
         headers = self._headers()
-        response = httpx.get(url, headers=headers, params=params, timeout=self._timeout)
+        response = self._get(url, headers=headers, params=params)
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -83,9 +94,14 @@ class GmailClient:
                 raise
             access_token = self.refresh_access_token()
             headers = {"Authorization": f"Bearer {access_token}"}
-            response = httpx.get(url, headers=headers, params=params, timeout=self._timeout)
+            response = self._get(url, headers=headers, params=params)
             response.raise_for_status()
         return response.json()
+
+    def _get(self, url: str, *, headers: dict[str, str], params: dict) -> httpx.Response:
+        if self._client is not None:
+            return self._client.get(url, headers=headers, params=params)
+        return httpx.get(url, headers=headers, params=params, timeout=self._timeout)
 
     def list_message_ids(
         self,

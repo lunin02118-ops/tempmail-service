@@ -22,6 +22,7 @@ from app.api.tempmail import router as tempmail_router
 from app.api.telegram import router as telegram_router, set_telegram_client_dependency
 from app.config import AppSettings
 from app.db import initialize_database
+from app.services.gmail_client import GmailClient
 from app.worker import process_gmail_tempmail_once, run_worker_loop
 
 
@@ -63,18 +64,28 @@ def _ensure_writable_gmail_token(settings: AppSettings) -> None:
 async def _gmail_tempmail_polling_loop(settings: AppSettings) -> None:
     interval = max(int(settings.gmail_poll_seconds or 60), 15)
     _stamp(f"polling loop started (interval={interval}s, address={settings.gmail_tempmail_address})")
-    while True:
-        try:
-            result = await asyncio.to_thread(process_gmail_tempmail_once, settings)
-            _stamp(f"poll result: {result}")
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _stamp(f"poll iteration failed: {traceback.format_exc()}")
-        try:
-            await asyncio.sleep(interval)
-        except asyncio.CancelledError:
-            raise
+    gmail_client = GmailClient(settings, persistent=True)
+    try:
+        while True:
+            try:
+                result = await asyncio.to_thread(
+                    process_gmail_tempmail_once,
+                    settings,
+                    gmail_client,
+                    allow_remote_ai=False,
+                )
+                if result.get("processed") or result.get("delivered") or result.get("truncated") or result.get("bootstrap"):
+                    _stamp(f"poll result: {result}")
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                _stamp(f"poll iteration failed: {traceback.format_exc()}")
+            try:
+                await asyncio.sleep(interval)
+            except asyncio.CancelledError:
+                raise
+    finally:
+        gmail_client.close()
 
 
 def create_app(telegram_client=None) -> FastAPI:
