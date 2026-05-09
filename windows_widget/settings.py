@@ -9,7 +9,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 APP_NAME = "SamGPTDesktopWidget"
 DEFAULT_WIDGET_URL = "https://tempmail-web.onrender.com/widget"
-WIDGET_CACHE_VERSION = "20260509-domains-121"
+WIDGET_CACHE_VERSION = "20260509-domains-243"
 MIN_WIDGET_WIDTH = 360
 MIN_WIDGET_HEIGHT = 430
 PERSISTED_SETTING_KEYS = (
