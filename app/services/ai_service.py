@@ -12,7 +12,11 @@ from urllib.parse import urlparse
 import httpx
 
 from app.config import AppSettings
-from app.services.text_encoding import normalize_email_content, repair_mojibake
+from app.services.text_encoding import (
+    EMAIL_ANALYSIS_BODY_MAX_CHARS,
+    normalize_email_content,
+    sanitize_email_header,
+)
 
 
 _URL_RE = re.compile(r"https?://[^\s<>\"]+")
@@ -223,9 +227,21 @@ def _extract_otp_code(text: str) -> tuple[str | None, str]:
 
 
 def _prepare_analysis_content(message: dict[str, object]) -> dict[str, str | None]:
-    subject = repair_mojibake(str(message.get("subject") or "").strip()) or ""
-    body_text = normalize_email_content(_decode_quoted_printable_text(str(message.get("body_text") or ""))) or ""
-    body_html = normalize_email_content(_decode_quoted_printable_text(str(message.get("body_html") or ""))) or ""
+    subject = sanitize_email_header(str(message.get("subject") or "").strip()) or ""
+    body_text = (
+        normalize_email_content(
+            _decode_quoted_printable_text(str(message.get("body_text") or "")),
+            max_chars=EMAIL_ANALYSIS_BODY_MAX_CHARS,
+        )
+        or ""
+    )
+    body_html = (
+        normalize_email_content(
+            _decode_quoted_printable_text(str(message.get("body_html") or "")),
+            max_chars=EMAIL_ANALYSIS_BODY_MAX_CHARS,
+        )
+        or ""
+    )
     visible_html_text = _strip_html_to_text(body_html)
     analysis_body = body_text or visible_html_text
     combined_text = _compact_text(subject, analysis_body)

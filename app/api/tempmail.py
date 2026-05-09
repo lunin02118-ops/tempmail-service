@@ -25,7 +25,14 @@ from app.schemas.tempmail import (
 from app.services.ai_service import MessageAnalysisService
 from app.services.mailbox_service import MailboxService
 from app.services.session_service import SESSION_COOKIE_NAME, generate_session_token, hash_session_token
-from app.services.text_encoding import normalize_email_content, repair_mojibake
+from app.services.text_encoding import (
+    EMAIL_BODY_MAX_CHARS,
+    normalize_email_content,
+    repair_mojibake,
+    sanitize_email_header,
+    sanitize_json_payload,
+    sanitize_raw_payload_json,
+)
 
 
 router = APIRouter(tags=["tempmail"])
@@ -434,22 +441,30 @@ async def ingest_message(
     ai_repo: AIExtractionRepository = Depends(get_ai_extraction_repository),
     analysis_service: MessageAnalysisService = Depends(get_analysis_service),
 ) -> IngestMessageResponse:
-    mailbox = mailbox_repo.get_by_address(request.to_address)
+    to_address = sanitize_email_header(request.to_address) or ""
+    mailbox = mailbox_repo.get_by_address(to_address)
     if mailbox is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="mailbox not found")
 
+    raw_payload_json = (
+        sanitize_raw_payload_json(
+            json.dumps(sanitize_json_payload(request.raw_payload), ensure_ascii=False),
+        )
+        if request.raw_payload is not None
+        else None
+    )
     message_id = message_repo.create_ingested_message(
         mailbox_id=int(mailbox["id"]),
-        source_provider=request.source_provider,
-        provider_message_id=request.provider_message_id,
-        internet_message_id=request.internet_message_id,
-        from_address=repair_mojibake(request.from_address),
-        to_address=request.to_address,
-        subject=repair_mojibake(request.subject),
+        source_provider=sanitize_email_header(request.source_provider) or "ingest",
+        provider_message_id=sanitize_email_header(request.provider_message_id),
+        internet_message_id=sanitize_email_header(request.internet_message_id),
+        from_address=sanitize_email_header(request.from_address),
+        to_address=to_address,
+        subject=sanitize_email_header(request.subject),
         received_at=request.received_at,
-        body_text=normalize_email_content(request.body_text),
-        body_html=normalize_email_content(request.body_html),
-        raw_payload_json=json.dumps(request.raw_payload) if request.raw_payload is not None else None,
+        body_text=normalize_email_content(request.body_text, max_chars=EMAIL_BODY_MAX_CHARS),
+        body_html=normalize_email_content(request.body_html, max_chars=EMAIL_BODY_MAX_CHARS),
+        raw_payload_json=raw_payload_json,
         has_attachments=request.has_attachments,
     )
     mailbox_repo.touch_last_seen(int(mailbox["id"]))

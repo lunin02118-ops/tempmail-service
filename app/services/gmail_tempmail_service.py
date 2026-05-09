@@ -12,7 +12,13 @@ from app.repositories.mailboxes import MailboxRepository
 from app.repositories.messages import MessageRepository
 from app.services.ai_service import MessageAnalysisService
 from app.services.parser_service import flatten_headers
-from app.services.text_encoding import normalize_email_content, repair_mojibake
+from app.services.text_encoding import (
+    EMAIL_BODY_MAX_CHARS,
+    normalize_email_content,
+    sanitize_email_header,
+    sanitize_json_payload,
+    sanitize_raw_payload_json,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -87,7 +93,10 @@ def _parse_received_at(date_header: str | None) -> datetime | None:
 
 def parse_gmail_message_to_payload(gmail_message: dict, fallback_to_address: str) -> dict[str, object]:
     payload = gmail_message.get("payload") or {}
-    headers = flatten_headers(payload.get("headers") or [])
+    headers = {
+        str(name): sanitize_email_header(str(value)) or ""
+        for name, value in flatten_headers(payload.get("headers") or []).items()
+    }
     body_text, body_html, has_attachments = _extract_bodies(payload)
 
     raw_payload = {
@@ -95,20 +104,24 @@ def parse_gmail_message_to_payload(gmail_message: dict, fallback_to_address: str
         "thread_id": gmail_message.get("threadId"),
         "label_ids": gmail_message.get("labelIds") or [],
         "internal_date": gmail_message.get("internalDate"),
-        "snippet": gmail_message.get("snippet"),
+        "snippet": sanitize_email_header(str(gmail_message.get("snippet") or "")) or None,
         "headers": headers,
     }
+    to_address = (sanitize_email_header(headers.get("To") or fallback_to_address) or fallback_to_address).strip().lower()
+    raw_payload_json = sanitize_raw_payload_json(
+        json.dumps(sanitize_json_payload(raw_payload), ensure_ascii=False),
+    )
 
     return {
-        "provider_message_id": str(gmail_message.get("id") or ""),
+        "provider_message_id": sanitize_email_header(str(gmail_message.get("id") or "")) or "",
         "internet_message_id": headers.get("Message-Id") or headers.get("Message-ID"),
-        "from_address": repair_mojibake(headers.get("From") or "") or None,
-        "to_address": (headers.get("To") or fallback_to_address).strip().lower() or fallback_to_address,
-        "subject": repair_mojibake(headers.get("Subject") or "") or None,
+        "from_address": sanitize_email_header(headers.get("From") or "") or None,
+        "to_address": to_address or fallback_to_address,
+        "subject": sanitize_email_header(headers.get("Subject") or "") or None,
         "received_at": _parse_received_at(headers.get("Date")),
-        "body_text": normalize_email_content(body_text) or None,
-        "body_html": normalize_email_content(body_html) or None,
-        "raw_payload_json": json.dumps(raw_payload, ensure_ascii=False),
+        "body_text": normalize_email_content(body_text, max_chars=EMAIL_BODY_MAX_CHARS) or None,
+        "body_html": normalize_email_content(body_html, max_chars=EMAIL_BODY_MAX_CHARS) or None,
+        "raw_payload_json": raw_payload_json,
         "has_attachments": bool(has_attachments),
     }
 

@@ -113,6 +113,20 @@ def test_parse_gmail_message_to_payload_extracts_text_html_and_metadata():
     assert raw_payload["headers"]["Subject"] == "Your verification code is 482931"
 
 
+def test_parse_gmail_message_to_payload_sanitizes_nul_bytes():
+    gmail_message = _sample_gmail_message(subject="Your code\x00 is 482931")
+    gmail_message["snippet"] = "Use\x00 this code."
+    gmail_message["payload"]["parts"][0]["body"]["data"] = _b64("Your verification\x00 code is 482931.")
+    gmail_message["payload"]["parts"][1]["body"]["data"] = _b64("<p>Code\x00 482931</p>")
+
+    payload = parse_gmail_message_to_payload(gmail_message, "17lunin021189@gmail.com")
+
+    assert "\x00" not in str(payload["subject"])
+    assert "\x00" not in str(payload["body_text"])
+    assert "\x00" not in str(payload["body_html"])
+    assert "\\u0000" not in str(payload["raw_payload_json"])
+
+
 def test_ingest_gmail_message_to_tempmail_creates_public_mailbox_and_runs_analysis(tmp_path, monkeypatch):
     _setup_tempmail_env(tmp_path, monkeypatch)
     settings = AppSettings.from_env()

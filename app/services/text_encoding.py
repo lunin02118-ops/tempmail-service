@@ -4,6 +4,11 @@ import quopri
 import re
 
 
+EMAIL_HEADER_MAX_CHARS = 4_096
+EMAIL_BODY_MAX_CHARS = 131_072
+EMAIL_RAW_PAYLOAD_MAX_CHARS = 65_536
+EMAIL_ANALYSIS_BODY_MAX_CHARS = 20_000
+
 _MOJIBAKE_MARKERS = (
     "Ð",
     "Ñ",
@@ -20,6 +25,7 @@ _MOJIBAKE_MARKERS = (
 _C1_CONTROL_RE = re.compile(r"[\x80-\x9f]")
 _CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
 _QUOTED_PRINTABLE_RE = re.compile(r"=(?:\r?\n|[0-9A-F]{2})")
+_UNSAFE_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
 def _mojibake_score(value: str) -> int:
@@ -68,11 +74,55 @@ def decode_quoted_printable_text(value: str | None) -> str | None:
         return decoded_bytes.decode("latin-1", errors="ignore")
 
 
-def normalize_email_content(value: str | None) -> str | None:
+def sanitize_email_text(value: str | None, *, max_chars: int | None = None) -> str | None:
     if value is None or value == "":
         return value
 
-    normalized = str(value)
+    text = _UNSAFE_CONTROL_RE.sub("", str(value))
+    if max_chars is not None and len(text) > max_chars:
+        text = text[:max_chars]
+    return text
+
+
+def sanitize_email_header(value: str | None, *, max_chars: int = EMAIL_HEADER_MAX_CHARS) -> str | None:
+    if value is None or value == "":
+        return value
+
+    repaired = repair_mojibake(value)
+    return sanitize_email_text(repaired, max_chars=max_chars)
+
+
+def sanitize_raw_payload_json(
+    value: str | None,
+    *,
+    max_chars: int = EMAIL_RAW_PAYLOAD_MAX_CHARS,
+) -> str | None:
+    return sanitize_email_text(value, max_chars=max_chars)
+
+
+def sanitize_json_payload(value: object, *, string_max_chars: int | None = EMAIL_BODY_MAX_CHARS) -> object:
+    if isinstance(value, str):
+        return sanitize_email_text(value, max_chars=string_max_chars) or ""
+    if isinstance(value, list):
+        return [sanitize_json_payload(item, string_max_chars=string_max_chars) for item in value]
+    if isinstance(value, tuple):
+        return [sanitize_json_payload(item, string_max_chars=string_max_chars) for item in value]
+    if isinstance(value, dict):
+        return {
+            str(sanitize_email_text(str(key), max_chars=EMAIL_HEADER_MAX_CHARS) or ""): sanitize_json_payload(
+                item,
+                string_max_chars=string_max_chars,
+            )
+            for key, item in value.items()
+        }
+    return value
+
+
+def normalize_email_content(value: str | None, *, max_chars: int | None = None) -> str | None:
+    if value is None or value == "":
+        return value
+
+    normalized = sanitize_email_text(str(value)) or ""
     previous = None
     for _ in range(2):
         if normalized == previous:
@@ -80,4 +130,5 @@ def normalize_email_content(value: str | None) -> str | None:
         previous = normalized
         normalized = decode_quoted_printable_text(normalized) or ""
         normalized = repair_mojibake(normalized) or ""
-    return normalized
+        normalized = sanitize_email_text(normalized) or ""
+    return sanitize_email_text(normalized, max_chars=max_chars)

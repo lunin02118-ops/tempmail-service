@@ -6,6 +6,12 @@ from sqlalchemy import and_, insert, join, or_, outerjoin, select, update
 
 from app.config import AppSettings
 from app.db import ai_extractions_table, get_engine, mailboxes_table, messages_table
+from app.services.text_encoding import (
+    EMAIL_BODY_MAX_CHARS,
+    normalize_email_content,
+    sanitize_email_header,
+    sanitize_raw_payload_json,
+)
 
 
 class MessageRepository:
@@ -59,6 +65,16 @@ class MessageRepository:
         raw_payload_json: str | None,
         has_attachments: bool = False,
     ) -> int:
+        source_provider = sanitize_email_header(source_provider) or "ingest"
+        provider_message_id = sanitize_email_header(provider_message_id)
+        internet_message_id = sanitize_email_header(internet_message_id)
+        from_address = sanitize_email_header(from_address)
+        to_address = sanitize_email_header(to_address)
+        subject = sanitize_email_header(subject)
+        body_text = normalize_email_content(body_text, max_chars=EMAIL_BODY_MAX_CHARS)
+        body_html = normalize_email_content(body_html, max_chars=EMAIL_BODY_MAX_CHARS)
+        raw_payload_json = sanitize_raw_payload_json(raw_payload_json)
+
         existing_message_id = self._get_existing_message_id(source_provider, provider_message_id)
         if existing_message_id is not None:
             return existing_message_id

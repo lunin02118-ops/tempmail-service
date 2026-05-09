@@ -8,6 +8,7 @@ from app.main import create_app
 from app.repositories.messages import MessageRepository
 from app.services.ai_service import MessageAnalysisService
 from app.services.session_service import hash_session_token
+from app.services.text_encoding import EMAIL_BODY_MAX_CHARS, EMAIL_RAW_PAYLOAD_MAX_CHARS
 
 
 def setup_tempmail_env(tmp_path, monkeypatch):
@@ -501,6 +502,45 @@ def test_ingest_normalizes_utf8_latin1_mojibake_before_analysis(tmp_path, monkey
     detail_payload = detail_response.json()
     assert detail_payload["body_text"] == body_text
     assert detail_payload["body_html"] == body_html
+
+
+def test_ingest_sanitizes_nul_bytes_and_caps_stored_email_fields(tmp_path, monkeypatch):
+    setup_tempmail_env(tmp_path, monkeypatch)
+    client = TestClient(create_app())
+
+    mailbox = client.post("/mailboxes", json={}).json()["mailbox"]
+    body_text = "Use code 123456 now.\x00" + ("A" * (EMAIL_BODY_MAX_CHARS + 100))
+    body_html = '<img src="https://mandrillapp.com/track/open.php?id\x001228aa">'
+    raw_payload = {"html": body_html, "blob": "B" * (EMAIL_RAW_PAYLOAD_MAX_CHARS + 100)}
+
+    ingest_response = client.post(
+        "/ingest/messages",
+        headers={"X-Ingest-Webhook-Secret": "test-ingest-secret"},
+        json={
+            "to_address": mailbox["address"],
+            "from_address": "Mailer\x00 <noreply@example.com>",
+            "subject": "Code\x00 inside",
+            "provider_message_id": "provider-nul",
+            "body_text": body_text,
+            "body_html": body_html,
+            "raw_payload": raw_payload,
+        },
+    )
+
+    assert ingest_response.status_code == 200
+    assert ingest_response.json()["notification"]["otp_code"] == "123456"
+
+    detail_response = client.get(f"/messages/{ingest_response.json()['message_id']}")
+
+    assert detail_response.status_code == 200
+    detail_payload = detail_response.json()
+    assert "\x00" not in detail_payload["from_address"]
+    assert "\x00" not in detail_payload["subject"]
+    assert "\x00" not in detail_payload["body_text"]
+    assert "\x00" not in detail_payload["body_html"]
+    assert "\\u0000" not in detail_payload["raw_payload_json"]
+    assert len(detail_payload["body_text"]) == EMAIL_BODY_MAX_CHARS
+    assert len(detail_payload["raw_payload_json"]) == EMAIL_RAW_PAYLOAD_MAX_CHARS
 
 
 def test_message_detail_decodes_stored_quoted_printable_html(tmp_path, monkeypatch):
