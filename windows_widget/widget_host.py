@@ -238,16 +238,39 @@ def persist_window_state(window: webview.Window, settings: WidgetSettings) -> No
 def inject_native_resize_handle(window: webview.Window) -> None:
     script = """
 (() => {
-  if (document.getElementById("native-resize-grip")) {
-    return;
-  }
+  const setupNativeChrome = () => {
+    const dragBar = document.querySelector(".window-bar");
+    if (document.getElementById("native-resize-grip") && dragBar?.dataset.nativeMoveReady) {
+      return;
+    }
 
+    if (!document.body || !dragBar) {
+      window.setTimeout(setupNativeChrome, 100);
+      return;
+    }
+
+  if (!document.getElementById("native-resize-grip-style")) {
   const style = document.createElement("style");
   style.id = "native-resize-grip-style";
   style.textContent = `
     .is-native-shell .desk-widget {
       min-height: auto !important;
       max-height: calc(100vh - 16px) !important;
+    }
+
+    .is-native-shell .window-bar {
+      cursor: grab;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .is-native-shell .window-bar.is-native-moving {
+      cursor: grabbing;
+    }
+
+    .is-native-shell .window-controls,
+    .is-native-shell .window-control {
+      cursor: default;
     }
 
     #native-resize-grip {
@@ -273,6 +296,77 @@ def inject_native_resize_handle(window: webview.Window) -> None:
     }
   `;
   document.head.append(style);
+  }
+
+  // The bundled pywebview drag region only covers a small title fragment.
+  // Disable it and use the full widget header as the native move handle.
+  document.querySelectorAll(".pywebview-drag-region").forEach((element) => {
+    element.classList.remove("pywebview-drag-region");
+  });
+
+  if (dragBar && !dragBar.dataset.nativeMoveReady) {
+    dragBar.dataset.nativeMoveReady = "true";
+
+    let activePointerId = null;
+    const ignoredDragTargets = "button, input, select, textarea, a, #native-resize-grip";
+
+    const stopMoving = async (event) => {
+      if (activePointerId !== event.pointerId) {
+        return;
+      }
+
+      if (dragBar.hasPointerCapture(event.pointerId)) {
+        dragBar.releasePointerCapture(event.pointerId);
+      }
+      activePointerId = null;
+      dragBar.classList.remove("is-native-moving");
+
+      try {
+        await window.pywebview?.api?.end_move?.();
+      } catch {
+        // The window may already be closing.
+      }
+    };
+
+    dragBar.addEventListener("pointerdown", async (event) => {
+      if (event.button !== 0 || event.target.closest?.(ignoredDragTargets)) {
+        return;
+      }
+
+      const api = window.pywebview?.api;
+      if (!api?.begin_move || !api?.move_window) {
+        return;
+      }
+
+      event.preventDefault();
+      activePointerId = event.pointerId;
+      dragBar.classList.add("is-native-moving");
+      dragBar.setPointerCapture(event.pointerId);
+
+      try {
+        await api.begin_move(Math.round(event.screenX), Math.round(event.screenY));
+      } catch {
+        activePointerId = null;
+        dragBar.classList.remove("is-native-moving");
+      }
+    });
+
+    dragBar.addEventListener("pointermove", (event) => {
+      if (activePointerId !== event.pointerId || !dragBar.hasPointerCapture(event.pointerId)) {
+        return;
+      }
+
+      event.preventDefault();
+      window.pywebview?.api?.move_window?.(Math.round(event.screenX), Math.round(event.screenY));
+    });
+
+    dragBar.addEventListener("pointerup", stopMoving);
+    dragBar.addEventListener("pointercancel", stopMoving);
+  }
+
+  if (document.getElementById("native-resize-grip")) {
+    return;
+  }
 
   const grip = document.createElement("button");
   grip.id = "native-resize-grip";
@@ -303,6 +397,9 @@ def inject_native_resize_handle(window: webview.Window) -> None:
     const height = Math.round(startHeight + event.screenY - startY);
     window.pywebview?.api?.resize_window(width, height);
   });
+  };
+
+  setupNativeChrome();
 })();
 """
     for _ in range(20):
@@ -350,6 +447,7 @@ class NativeShellApi:
         self._settings = settings
         self._window: webview.Window | None = None
         self._hwnd = 0
+        self._move_origin: tuple[int, int, int, int] | None = None
         self._tray_icon: pystray.Icon | None = None
         self._tray_lock = threading.RLock()
         self._hidden_to_tray = False
@@ -475,6 +573,47 @@ class NativeShellApi:
         save_settings(self._settings)
         return True
 
+    def begin_move(self, screen_x: int, screen_y: int) -> bool:
+        hwnd = self._ensure_hwnd()
+        if not hwnd:
+            return False
+
+        rect = RECT()
+        if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+            return False
+
+        self._move_origin = (int(screen_x), int(screen_y), int(rect.left), int(rect.top))
+        return True
+
+    def move_window(self, screen_x: int, screen_y: int) -> bool:
+        hwnd = self._ensure_hwnd()
+        if not hwnd or self._move_origin is None:
+            return False
+
+        origin_x, origin_y, window_x, window_y = self._move_origin
+        next_x = window_x + int(screen_x) - origin_x
+        next_y = window_y + int(screen_y) - origin_y
+        user32.SetWindowPos(
+            hwnd,
+            0,
+            next_x,
+            next_y,
+            0,
+            0,
+            SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE,
+        )
+        self._settings.x = next_x
+        self._settings.y = next_y
+        return True
+
+    def end_move(self) -> bool:
+        if self._move_origin is None:
+            return False
+
+        self._move_origin = None
+        save_settings(self._settings)
+        return True
+
     def open_full_app(self, url: str) -> bool:
         if not url:
             return False
@@ -551,6 +690,9 @@ def main() -> None:
     window.events.resized += lambda *_: persist_window_state(window, settings)
     window.events.closing += lambda *_: persist_window_state(window, settings)
     window.events.closing += lambda *_: shell_api._shutdown()
+    window.events.loaded += lambda *_: threading.Thread(
+        target=inject_native_resize_handle, args=(window,), daemon=True
+    ).start()
     window.events.shown += lambda *_: threading.Thread(
         target=bootstrap_native_shell, args=(window, settings, shell_api), daemon=True
     ).start()

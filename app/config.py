@@ -5,108 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-GENERATED_MAIL_DOMAIN_PREFIXES = (
-    "atlas",
-    "aurora",
-    "beacon",
-    "blaze",
-    "bloom",
-    "breeze",
-    "byte",
-    "cipher",
-    "cloud",
-    "comet",
-    "cosmo",
-    "dash",
-    "delta",
-    "drift",
-    "echo",
-    "ember",
-    "flare",
-    "flux",
-    "forge",
-    "glide",
-    "glow",
-    "grid",
-    "halo",
-    "hyper",
-    "ion",
-    "jet",
-    "lumen",
-    "matrix",
-    "micro",
-    "nano",
-    "neon",
-    "nova",
-    "orbit",
-    "pixel",
-    "pulse",
-    "quantum",
-    "radar",
-    "relay",
-    "ripple",
-    "rocket",
-    "signal",
-    "spark",
-    "swift",
-    "sync",
-    "titan",
-    "vector",
-    "vivid",
-    "vortex",
-    "wave",
-    "zen",
-    "anchor",
-    "apex",
-    "arc",
-    "aster",
-    "beam",
-    "bolt",
-    "branch",
-    "bridge",
-    "cascade",
-    "cinder",
-    "clover",
-    "coral",
-    "crystal",
-    "dawn",
-    "dynamo",
-    "field",
-    "fjord",
-    "frame",
-    "frost",
-    "garden",
-    "harbor",
-    "haven",
-    "horizon",
-    "ivy",
-    "jade",
-    "keystone",
-    "lantern",
-    "launch",
-    "ledger",
-    "meadow",
-    "mercury",
-    "mirror",
-    "monarch",
-    "nimbus",
-    "onyx",
-    "path",
-    "pearl",
-    "plume",
-    "prism",
-    "quartz",
-    "river",
-    "shadow",
-    "shard",
-    "silver",
-    "solstice",
-    "spire",
-    "stone",
-    "terra",
-    "trace",
-    "willow",
-)
+GENERATED_MAIL_DOMAIN_COUNT = 100
+GENERATED_MAIL_DOMAIN_PREFIXES = tuple(f"tmp{index:03d}" for index in range(1, GENERATED_MAIL_DOMAIN_COUNT + 1))
 
 
 def _load_local_env_file() -> None:
@@ -192,6 +92,21 @@ def _generate_mail_domain_variants(base_domain: str) -> tuple[str, ...]:
     return tuple(f"{prefix}.{clean}" for prefix in GENERATED_MAIL_DOMAIN_PREFIXES)
 
 
+def _looks_like_base_mail_domain(domain: str) -> bool:
+    labels = [label for label in domain.strip().lower().split(".") if label]
+    return len(labels) == 2
+
+
+def _expand_generated_mail_domains(explicit_domains: tuple[str, ...]) -> tuple[str, ...]:
+    base_domains = [domain for domain in explicit_domains if _looks_like_base_mail_domain(domain)]
+    generated_domains = [
+        generated_domain
+        for base_domain in base_domains
+        for generated_domain in _generate_mail_domain_variants(base_domain)
+    ]
+    return _normalize_domain_values([*explicit_domains, *generated_domains])
+
+
 def _resolve_public_mail_domains() -> tuple[str, ...]:
     explicit_domains = _normalize_domain_values(
         list(_split_csv_env("PUBLIC_MAIL_DOMAINS"))
@@ -203,8 +118,7 @@ def _resolve_public_mail_domains() -> tuple[str, ...]:
     if not explicit_domains:
         return ()
 
-    generated_domains = _generate_mail_domain_variants(explicit_domains[0])
-    return _normalize_domain_values([*explicit_domains, *generated_domains])
+    return _expand_generated_mail_domains(explicit_domains)
 
 
 def _resolve_groq_api_keys() -> tuple[str, ...]:

@@ -60,8 +60,23 @@ def test_settings_expand_public_mail_domains_with_generated_variants(tmp_path, m
 
     assert settings.public_mail_domains[0] == "samgpt.me"
     assert len(settings.public_mail_domains) == len(GENERATED_MAIL_DOMAIN_PREFIXES) + 1
-    assert "atlas.samgpt.me" in settings.public_mail_domains
-    assert "zen.samgpt.me" in settings.public_mail_domains
+    assert "tmp001.samgpt.me" in settings.public_mail_domains
+    assert "tmp100.samgpt.me" in settings.public_mail_domains
+
+
+def test_settings_expand_generated_variants_for_each_base_mail_domain(tmp_path, monkeypatch):
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'app.db'}")
+    monkeypatch.setenv("PUBLIC_MAIL_DOMAINS", "samgpt.me,sawdd34.tech,alt.samgpt.me")
+
+    settings = AppSettings.from_env()
+
+    assert settings.public_mail_domains[:3] == ("samgpt.me", "sawdd34.tech", "alt.samgpt.me")
+    assert "tmp001.samgpt.me" in settings.public_mail_domains
+    assert "tmp100.samgpt.me" in settings.public_mail_domains
+    assert "tmp001.sawdd34.tech" in settings.public_mail_domains
+    assert "tmp100.sawdd34.tech" in settings.public_mail_domains
+    assert "tmp001.alt.samgpt.me" not in settings.public_mail_domains
 
 
 def test_settings_load_private_values_from_env_local(tmp_path, monkeypatch):

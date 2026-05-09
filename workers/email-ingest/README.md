@@ -23,7 +23,7 @@ Non-secret variables live in `wrangler.jsonc`:
 {
   "vars": {
     "APP_INGEST_URL": "https://your-render-app.onrender.com/ingest/messages",
-    "PUBLIC_MAIL_DOMAIN": "samgpt.me",
+    "PUBLIC_MAIL_DOMAINS": "samgpt.me,sawdd34.tech",
     "MAX_RAW_BYTES": "1048576"
   }
 }
