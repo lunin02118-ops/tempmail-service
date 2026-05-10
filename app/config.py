@@ -6,7 +6,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GENERATED_MAIL_DOMAIN_COUNT = 100
-GENERATED_MAIL_DOMAIN_PREFIXES = tuple(f"tmp{index:03d}" for index in range(1, GENERATED_MAIL_DOMAIN_COUNT + 1))
+GENERATED_MAIL_DOMAIN_PREFIXES = tuple(f"inbox{index:03d}" for index in range(1, GENERATED_MAIL_DOMAIN_COUNT + 1))
 
 
 def _load_local_env_file() -> None:

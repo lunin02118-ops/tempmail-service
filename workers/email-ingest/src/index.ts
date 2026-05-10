@@ -34,7 +34,7 @@ const TEXT_PART_RE = /Content-Type:\s*text\/plain(?:;[^\r\n]*)?[\s\S]*?(?=\r?\n-
 const HTML_PART_RE = /Content-Type:\s*text\/html(?:;[^\r\n]*)?[\s\S]*?(?=\r?\n--[^\r\n]+|$)/i;
 const GENERATED_DOMAIN_PREFIX_COUNT = 100;
 const GENERATED_DOMAIN_PREFIXES = Array.from({ length: GENERATED_DOMAIN_PREFIX_COUNT }, (_value, index) => {
-  return `tmp${String(index + 1).padStart(3, "0")}`;
+  return `inbox${String(index + 1).padStart(3, "0")}`;
 });
 
 function normalizeAddress(value: string | null | undefined): string | null {

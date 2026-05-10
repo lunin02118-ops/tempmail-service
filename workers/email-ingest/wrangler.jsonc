@@ -11,7 +11,7 @@
   },
   "vars": {
     "APP_INGEST_URL": "https://tempmail-web.onrender.com/ingest/messages",
-    "PUBLIC_MAIL_DOMAINS": "samgpt.me,sawdd34.tech,rheolab.site",
+    "PUBLIC_MAIL_DOMAINS": "samgpt.me,sawdd34.tech,rheolab.site,samgpt32.net",
     "PUBLIC_MAIL_DOMAIN": "samgpt.me",
     "MAX_RAW_BYTES": "1048576"
   }

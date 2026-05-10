@@ -145,8 +145,8 @@ def test_web_app_and_client_config_do_not_expose_private_turnstile_secret(tmp_pa
     payload = config_response.json()
     assert payload["mail_domain"] == "samgpt.me"
     assert payload["mail_domains"][0] == "samgpt.me"
-    assert "tmp001.samgpt.me" in payload["mail_domains"]
-    assert "tmp100.samgpt.me" in payload["mail_domains"]
+    assert "inbox001.samgpt.me" in payload["mail_domains"]
+    assert "inbox100.samgpt.me" in payload["mail_domains"]
     assert payload["turnstile_site_key"] is None
     assert payload["turnstile_enabled"] is False
     assert "private-secret-key" not in config_response.text
@@ -169,12 +169,12 @@ def test_create_mailbox_accepts_generated_requested_domain(tmp_path, monkeypatch
     setup_tempmail_env(tmp_path, monkeypatch)
     client = TestClient(create_app())
 
-    response = client.post("/mailboxes", json={"requested_domain": "tmp001.samgpt.me"})
+    response = client.post("/mailboxes", json={"requested_domain": "inbox001.samgpt.me"})
 
     assert response.status_code == 201
     payload = response.json()
-    assert payload["mailbox"]["domain"] == "tmp001.samgpt.me"
-    assert payload["mailbox"]["address"].endswith("@tmp001.samgpt.me")
+    assert payload["mailbox"]["domain"] == "inbox001.samgpt.me"
+    assert payload["mailbox"]["address"].endswith("@inbox001.samgpt.me")
 
 
 def test_ingested_message_appears_in_unified_and_mailbox_inbox(tmp_path, monkeypatch):
@@ -694,7 +694,7 @@ def test_create_mailbox_can_choose_requested_domain_from_allowed_list(tmp_path, 
     assert config_response.status_code == 200
     mail_domains = config_response.json()["mail_domains"]
     assert mail_domains[:2] == ["samgpt.me", "alt.samgpt.me"]
-    assert "tmp001.samgpt.me" in mail_domains
+    assert "inbox001.samgpt.me" in mail_domains
     assert create_response.status_code == 201
     mailbox = create_response.json()["mailbox"]
     assert mailbox["domain"] == "alt.samgpt.me"
