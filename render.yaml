@@ -15,6 +15,10 @@ services:
         sync: false
       - key: PUBLIC_MAIL_DOMAIN
         sync: false
+      - key: PUBLIC_MAIL_SUBDOMAIN_PREFIX
+        value: edu
+      - key: PUBLIC_MAIL_EXTRA_DOMAINS
+        value: rheolab.site,samgpt32.net
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_URL_DIRECT

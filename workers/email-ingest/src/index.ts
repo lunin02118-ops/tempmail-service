@@ -3,6 +3,8 @@ export interface Env {
   INGEST_WEBHOOK_SECRET: string;
   PUBLIC_MAIL_DOMAIN?: string;
   PUBLIC_MAIL_DOMAINS?: string;
+  PUBLIC_MAIL_SUBDOMAIN_PREFIX?: string;
+  PUBLIC_MAIL_EXTRA_DOMAINS?: string;
   MAX_RAW_BYTES?: string;
   WORKER_ENVIRONMENT?: string;
 }
@@ -49,10 +51,18 @@ function normalizeDomains(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean))];
 }
 
-function generateDomainVariants(baseDomain: string | undefined): string[] {
+function normalizeSubdomainPrefix(value: string | undefined): string {
+  return (value ?? "edu").trim().toLowerCase().replace(/^\.+|\.+$/g, "");
+}
+
+function generateDomainVariants(baseDomain: string | undefined, subdomainPrefix: string): string[] {
   const clean = baseDomain?.trim().toLowerCase();
   if (!clean || !clean.includes(".")) {
     return [];
+  }
+
+  if (subdomainPrefix) {
+    return [`${subdomainPrefix}.${clean}`];
   }
 
   return GENERATED_DOMAIN_PREFIXES.map((prefix) => `${prefix}.${clean}`);
@@ -62,19 +72,23 @@ function looksLikeBaseMailDomain(domain: string): boolean {
   return domain.split(".").filter(Boolean).length === 2;
 }
 
-function expandGeneratedMailDomains(domains: string[]): string[] {
-  const generatedDomains = domains.filter(looksLikeBaseMailDomain).flatMap(generateDomainVariants);
+function expandGeneratedMailDomains(domains: string[], subdomainPrefix: string): string[] {
+  const generatedDomains = domains
+    .filter(looksLikeBaseMailDomain)
+    .flatMap((domain) => generateDomainVariants(domain, subdomainPrefix));
   return normalizeDomains([...domains, ...generatedDomains]);
 }
 
 function parseAllowedDomains(env: Env): string[] {
+  const subdomainPrefix = normalizeSubdomainPrefix(env.PUBLIC_MAIL_SUBDOMAIN_PREFIX);
   const csvValues = normalizeDomains((env.PUBLIC_MAIL_DOMAINS ?? "").split(","));
-  if (csvValues.length) {
-    return expandGeneratedMailDomains(csvValues);
-  }
-
+  const extraValues = normalizeDomains((env.PUBLIC_MAIL_EXTRA_DOMAINS ?? "").split(","));
   const singleDomain = env.PUBLIC_MAIL_DOMAIN?.trim().toLowerCase();
-  return singleDomain ? expandGeneratedMailDomains([singleDomain]) : [];
+  const baseValues = csvValues.length ? csvValues : singleDomain ? [singleDomain] : [];
+  if (baseValues.length || extraValues.length) {
+    return expandGeneratedMailDomains([...baseValues, ...extraValues], subdomainPrefix);
+  }
+  return [];
 }
 
 function getHeader(headers: Headers, name: string): string | null {

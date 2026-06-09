@@ -8,6 +8,7 @@ python -m PyInstaller `
   --clean `
   --onefile `
   --noconsole `
+  --exclude-module setuptools `
   --name SamGPTDesktopWidget `
   windows_widget\widget_host.py
 

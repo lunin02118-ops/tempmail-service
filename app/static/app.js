@@ -10,6 +10,8 @@ const state = {
   selectedSourceTab: "text",
   sharedCodes: [],
 };
+const EDU_MAIL_SUBDOMAIN_PREFIX = "edu";
+const LEGACY_INBOX_DOMAIN_RE = /^inbox\d{3}\./;
 
 const el = {
   form: document.querySelector("#mailbox-form"),
@@ -304,12 +306,45 @@ async function writeClipboard(value) {
   textarea.remove();
 }
 
+function normalizeDomainList(values) {
+  const seen = new Set();
+  return values
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean)
+    .filter((domain) => {
+      if (seen.has(domain)) {
+        return false;
+      }
+      seen.add(domain);
+      return true;
+    });
+}
+
+function isBaseMailDomain(domain) {
+  return domain.split(".").filter(Boolean).length === 2;
+}
+
+function resolveSelectableMailDomains(rawDomains) {
+  const domains = normalizeDomainList(rawDomains);
+  const baseDomains = domains.filter(isBaseMailDomain);
+  if (baseDomains.length) {
+    return baseDomains.map((domain) => `${EDU_MAIL_SUBDOMAIN_PREFIX}.${domain}`);
+  }
+
+  const eduDomains = domains.filter((domain) => domain.startsWith(`${EDU_MAIL_SUBDOMAIN_PREFIX}.`));
+  if (eduDomains.length) {
+    return eduDomains;
+  }
+
+  return domains.filter((domain) => !LEGACY_INBOX_DOMAIN_RE.test(domain));
+}
+
 function getAvailableDomains() {
   const domains = Array.isArray(state.config?.mail_domains) ? state.config.mail_domains : [];
   if (domains.length) {
-    return domains;
+    return resolveSelectableMailDomains(domains);
   }
-  return state.config?.mail_domain ? [state.config.mail_domain] : [];
+  return state.config?.mail_domain ? resolveSelectableMailDomains([state.config.mail_domain]) : [];
 }
 
 function renderDomainOptions() {

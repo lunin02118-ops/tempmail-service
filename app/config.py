@@ -92,6 +92,18 @@ def _generate_mail_domain_variants(base_domain: str) -> tuple[str, ...]:
     return tuple(f"{prefix}.{clean}" for prefix in GENERATED_MAIL_DOMAIN_PREFIXES)
 
 
+def _resolve_public_mail_subdomain_prefix() -> str:
+    return os.getenv("PUBLIC_MAIL_SUBDOMAIN_PREFIX", "edu").strip().lower().strip(".")
+
+
+def _resolve_extra_mail_domains() -> tuple[str, ...]:
+    return _normalize_domain_values(list(_split_csv_env("PUBLIC_MAIL_EXTRA_DOMAINS")))
+
+
+def _resolve_cloudflare_api_token() -> str | None:
+    return os.getenv("CLOUDFLARE_API_TOKEN") or os.getenv("CLOUDFLARE_USER_TOKEN")
+
+
 def _looks_like_base_mail_domain(domain: str) -> bool:
     labels = [label for label in domain.strip().lower().split(".") if label]
     return len(labels) == 2
@@ -99,11 +111,15 @@ def _looks_like_base_mail_domain(domain: str) -> bool:
 
 def _expand_generated_mail_domains(explicit_domains: tuple[str, ...]) -> tuple[str, ...]:
     base_domains = [domain for domain in explicit_domains if _looks_like_base_mail_domain(domain)]
-    generated_domains = [
-        generated_domain
-        for base_domain in base_domains
-        for generated_domain in _generate_mail_domain_variants(base_domain)
-    ]
+    subdomain_prefix = _resolve_public_mail_subdomain_prefix()
+    if subdomain_prefix:
+        generated_domains = [f"{subdomain_prefix}.{base_domain}" for base_domain in base_domains]
+    else:
+        generated_domains = [
+            generated_domain
+            for base_domain in base_domains
+            for generated_domain in _generate_mail_domain_variants(base_domain)
+        ]
     return _normalize_domain_values([*explicit_domains, *generated_domains])
 
 
@@ -115,10 +131,11 @@ def _resolve_public_mail_domains() -> tuple[str, ...]:
             os.getenv("DEFAULT_FROM_ALIAS_DOMAIN", ""),
         ]
     )
-    if not explicit_domains:
+    extra_domains = _resolve_extra_mail_domains()
+    if not explicit_domains and not extra_domains:
         return ()
 
-    return _expand_generated_mail_domains(explicit_domains)
+    return _expand_generated_mail_domains([*explicit_domains, *extra_domains])
 
 
 def _resolve_groq_api_keys() -> tuple[str, ...]:
@@ -231,7 +248,7 @@ class AppSettings:
             turnstile_site_key=os.getenv("TURNSTILE_SITE_KEY"),
             turnstile_secret_key=os.getenv("TURNSTILE_SECRET_KEY"),
             turnstile_enabled=_read_bool_env("TURNSTILE_ENABLED", default=False),
-            cloudflare_api_token=os.getenv("CLOUDFLARE_API_TOKEN"),
+            cloudflare_api_token=_resolve_cloudflare_api_token(),
             cloudflare_account_id=os.getenv("CLOUDFLARE_ACCOUNT_ID"),
             cloudflare_zone_id=os.getenv("CLOUDFLARE_ZONE_ID"),
             groq_api_keys=_resolve_groq_api_keys(),

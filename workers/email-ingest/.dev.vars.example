@@ -1,4 +1,6 @@
 APP_INGEST_URL=https://your-render-app.onrender.com/ingest/messages
 PUBLIC_MAIL_DOMAIN=samgpt.me
+PUBLIC_MAIL_SUBDOMAIN_PREFIX=edu
+PUBLIC_MAIL_EXTRA_DOMAINS=rheolab.site,samgpt32.net
 MAX_RAW_BYTES=1048576
 INGEST_WEBHOOK_SECRET=change-me

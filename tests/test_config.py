@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import app.config as config_module
-from app.config import AppSettings, GENERATED_MAIL_DOMAIN_PREFIXES
+from app.config import AppSettings
 
 
 def test_settings_build_paths_and_poll_seconds_from_env(tmp_path, monkeypatch):
@@ -58,10 +58,8 @@ def test_settings_expand_public_mail_domains_with_generated_variants(tmp_path, m
 
     settings = AppSettings.from_env()
 
-    assert settings.public_mail_domains[0] == "samgpt.me"
-    assert len(settings.public_mail_domains) == len(GENERATED_MAIL_DOMAIN_PREFIXES) + 1
-    assert "inbox001.samgpt.me" in settings.public_mail_domains
-    assert "inbox100.samgpt.me" in settings.public_mail_domains
+    assert settings.public_mail_domains == ("samgpt.me", "edu.samgpt.me")
+    assert "inbox001.samgpt.me" not in settings.public_mail_domains
 
 
 def test_settings_expand_generated_variants_for_each_base_mail_domain(tmp_path, monkeypatch):
@@ -71,12 +69,61 @@ def test_settings_expand_generated_variants_for_each_base_mail_domain(tmp_path, 
 
     settings = AppSettings.from_env()
 
-    assert settings.public_mail_domains[:3] == ("samgpt.me", "sawdd34.tech", "alt.samgpt.me")
-    assert "inbox001.samgpt.me" in settings.public_mail_domains
-    assert "inbox100.samgpt.me" in settings.public_mail_domains
-    assert "inbox001.sawdd34.tech" in settings.public_mail_domains
-    assert "inbox100.sawdd34.tech" in settings.public_mail_domains
-    assert "inbox001.alt.samgpt.me" not in settings.public_mail_domains
+    assert settings.public_mail_domains == (
+        "samgpt.me",
+        "sawdd34.tech",
+        "alt.samgpt.me",
+        "edu.samgpt.me",
+        "edu.sawdd34.tech",
+    )
+    assert "edu.alt.samgpt.me" not in settings.public_mail_domains
+    assert "inbox001.samgpt.me" not in settings.public_mail_domains
+
+
+def test_settings_expand_public_mail_domains_with_named_subdomain_prefix(tmp_path, monkeypatch):
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'app.db'}")
+    monkeypatch.setenv(
+        "PUBLIC_MAIL_DOMAINS",
+        "samgpt.me,sawdd34.tech,rheolab.site,samgpt32.net,rocket.samgpt.me",
+    )
+    monkeypatch.setenv("PUBLIC_MAIL_SUBDOMAIN_PREFIX", "edu")
+
+    settings = AppSettings.from_env()
+
+    assert settings.public_mail_domains == (
+        "samgpt.me",
+        "sawdd34.tech",
+        "rheolab.site",
+        "samgpt32.net",
+        "rocket.samgpt.me",
+        "edu.samgpt.me",
+        "edu.sawdd34.tech",
+        "edu.rheolab.site",
+        "edu.samgpt32.net",
+    )
+    assert "inbox001.samgpt32.net" not in settings.public_mail_domains
+
+
+def test_settings_include_extra_mail_domains_before_expansion(tmp_path, monkeypatch):
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'app.db'}")
+    monkeypatch.setenv("PUBLIC_MAIL_DOMAINS", "samgpt.me,sawdd34.tech")
+    monkeypatch.setenv("PUBLIC_MAIL_EXTRA_DOMAINS", "rheolab.site,samgpt32.net")
+    monkeypatch.setenv("PUBLIC_MAIL_SUBDOMAIN_PREFIX", "edu")
+
+    settings = AppSettings.from_env()
+
+    assert settings.public_mail_domains == (
+        "samgpt.me",
+        "sawdd34.tech",
+        "rheolab.site",
+        "samgpt32.net",
+        "edu.samgpt.me",
+        "edu.sawdd34.tech",
+        "edu.rheolab.site",
+        "edu.samgpt32.net",
+    )
 
 
 def test_settings_load_private_values_from_env_local(tmp_path, monkeypatch):
